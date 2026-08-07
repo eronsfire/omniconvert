@@ -96,15 +96,15 @@ def main(page: ft.Page):
             raise ValueError("Cole uma URL do YouTube.")
 
         formatos = {
-            "Melhor Qualidade (Máxima)": "bestvideo+bestaudio/best",
-            "2160p (4K)": "bestvideo[height<=2160]+bestaudio/best",
-            "1440p (2K)": "bestvideo[height<=1440]+bestaudio/best",
-            "1080p (Full HD)": "bestvideo[height<=1080]+bestaudio/best",
-            "720p (HD)": "bestvideo[height<=720]+bestaudio/best",
-            "480p (SD)": "bestvideo[height<=480]+bestaudio/best",
-            "360p (Baixa)": "bestvideo[height<=360]+bestaudio/best",
-            "Apenas Áudio (MP3)": "bestaudio/best",
-        }
+    "Melhor Qualidade (Máxima)": "best",
+    "2160p (4K)": "best[height<=2160]",
+    "1440p (2K)": "best[height<=1440]",
+    "1080p (Full HD)": "best[height<=1080]",
+    "720p (HD)": "best[height<=720]",
+    "480p (SD)": "best[height<=480]",
+    "360p (Baixa)": "best[height<=360]",
+    "Apenas Áudio (MP3)": "bestaudio/best",
+}
 
         pasta_download = "/sdcard/Download" if os.path.exists("/sdcard/Download") else "."
 
