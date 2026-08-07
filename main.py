@@ -6,12 +6,12 @@ from pdf2image import convert_from_path
 import yt_dlp
 import requests
 
-VERSION_ATUAL = "0.1"
+VERSION_ATUAL = "0.2"
 REPO_GITHUB = "eronsfire/omniconvert"  # Seu usuário/repositório
 
 
 def main(page: ft.Page):
-    page.title = f"OmniConvert v{VERSION_ATUAL}"
+    page.title = f"Conversor Eronsfire v{VERSION_ATUAL}"
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = 15
     page.scroll = ft.ScrollMode.AUTO
@@ -37,7 +37,6 @@ def main(page: ft.Page):
                 tag_versao = dados.get("tag_name", "").replace("v", "").strip()
 
                 if tag_versao and tag_versao != VERSION_ATUAL:
-                    # Procura o arquivo .apk nos assets da release
                     apk_url = None
                     for asset in dados.get("assets", []):
                         if asset.get("name", "").endswith(".apk"):
@@ -47,13 +46,11 @@ def main(page: ft.Page):
                     if apk_url:
                         mostrar_status(f"Nova versão v{tag_versao} encontrada! Baixando APK...", ft.Colors.BLUE_400)
                         
-                        # Define pasta de Download do celular/PC
                         pasta_dest = "/sdcard/Download" if os.path.exists("/sdcard/Download") else "."
-                        caminho_apk = os.path.join(pasta_dest, "omniconvert_update.apk")
+                        caminho_apk = os.path.join(pasta_dest, "Conversor Eronsfire.apk")
                         
-                        # Faz o download do APK
                         urllib.request.urlretrieve(apk_url, caminho_apk)
-                        mostrar_status(f"APK v{tag_versao} baixado em:\n{caminho_apk}\nAbra o arquivo para instalar!", ft.Colors.GREEN_400)
+                        mostrar_status(f"APK v{tag_versao} baixado com sucesso em:\n{caminho_apk}\nAbra o arquivo para instalar!", ft.Colors.GREEN_400)
                     else:
                         mostrar_status(f"Versão v{tag_versao} encontrada, mas o APK não foi anexado.", ft.Colors.ORANGE_400)
                 else:
