@@ -1,12 +1,13 @@
 import os
 import urllib.request
+import threading
+import requests
 import flet as ft
 from PIL import Image
 from pdf2image import convert_from_path
 import yt_dlp
-import requests
 
-VERSION_ATUAL = "0.7"
+VERSION_ATUAL = "0.8"
 REPO_GITHUB = "eronsfire/omniconvert"  # Seu usuário/repositório
 
 
@@ -89,43 +90,7 @@ def main(page: ft.Page):
             raise ValueError(f"Não é possível converter de .{extensao} para .{fmt_dest}")
 
     # ==========================================
-    # LÓGICA DE DOWNLOAD DO YOUTUBE
-    # ==========================================
-    def baixar_youtube(url, qualidade):
-        if not url:
-            raise ValueError("Cole uma URL do YouTube.")
-
-        formatos = {
-    "Melhor Qualidade (Máxima)": "best",
-    "2160p (4K)": "best[height<=2160]",
-    "1440p (2K)": "best[height<=1440]",
-    "1080p (Full HD)": "best[height<=1080]",
-    "720p (HD)": "best[height<=720]",
-    "480p (SD)": "best[height<=480]",
-    "360p (Baixa)": "best[height<=360]",
-    "Apenas Áudio (MP3)": "bestaudio/best",
-}
-
-        pasta_download = "/sdcard/Download" if os.path.exists("/sdcard/Download") else "."
-
-        ydl_opts = {
-            "format": formatos.get(qualidade, "bestvideo+bestaudio/best"),
-            "outtmpl": os.path.join(pasta_download, "%(title)s.%(ext)s"),
-            "quiet": True,
-        }
-
-        if qualidade == "Apenas Áudio (MP3)":
-            ydl_opts["postprocessors"] = [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }]
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-
-    # ==========================================
-    # INTERFACE DO USUÁRIO
+    # INTERFACE DO USUÁRIO & COMPONENTES
     # ==========================================
 
     async def selecionar_arquivo(e):
@@ -194,13 +159,91 @@ def main(page: ft.Page):
         value="Melhor Qualidade (Máxima)"
     )
 
+    progresso_bar = ft.ProgressBar(width=400, value=0, visible=False)
+    progresso_texto = ft.Text("", size=12, color=ft.Colors.GREY_400)
+    
+    btn_baixar = ft.Button(
+        "BAIXAR VÍDEO",
+        icon=ft.Icons.DOWNLOAD,
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+        width=400,
+        height=45
+    )
+
     def ao_clicar_baixar(e):
-        try:
-            mostrar_status("Baixando mídia... Por favor aguarde.", ft.Colors.AMBER_400)
-            baixar_youtube(input_url.value, dropdown_qualidade.value)
-            mostrar_status("Download finalizado! Salvo na pasta Downloads.", ft.Colors.GREEN_400)
-        except Exception as err:
-            mostrar_status(f"Erro no download: {str(err)}", ft.Colors.RED_400)
+        url = input_url.value.strip()
+        qualidade = dropdown_qualidade.value
+
+        if not url:
+            mostrar_status("Cole uma URL do YouTube válida.", ft.Colors.RED_400)
+            return
+
+        # Bloqueia o botão e ativa barras
+        btn_baixar.disabled = True
+        progresso_bar.visible = True
+        progresso_bar.value = 0
+        progresso_texto.value = "Iniciando..."
+        mostrar_status("Iniciando download da mídia...", ft.Colors.AMBER_400)
+        page.update()
+
+        def rodar_download():
+            try:
+                formatos = {
+                    "Melhor Qualidade (Máxima)": "best",
+                    "2160p (4K)": "best[height<=2160]",
+                    "1440p (2K)": "best[height<=1440]",
+                    "1080p (Full HD)": "best[height<=1080]",
+                    "720p (HD)": "best[height<=720]",
+                    "480p (SD)": "best[height<=480]",
+                    "360p (Baixa)": "best[height<=360]",
+                    "Apenas Áudio (MP3)": "bestaudio/best",
+                }
+
+                pasta_download = "/sdcard/Download" if os.path.exists("/sdcard/Download") else "."
+
+                def progress_hook(d):
+                    if d['status'] == 'downloading':
+                        total = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
+                        downloaded = d.get('downloaded_bytes', 0)
+                        speed = d.get('speed', 0) or 0
+
+                        porcentagem = (downloaded / total) if total > 0 else 0
+                        mb_downloaded = downloaded / (1024 * 1024)
+                        mb_total = total / (1024 * 1024)
+                        mb_speed = speed / (1024 * 1024)
+
+                        progresso_bar.value = porcentagem
+                        progresso_texto.value = f"{porcentagem * 100:.1f}% de {mb_total:.1f} MB ({mb_speed:.2f} MB/s)"
+                        page.update()
+
+                    elif d['status'] == 'finished':
+                        progresso_bar.value = 1.0
+                        progresso_texto.value = "Finalizando e salvando arquivo..."
+                        page.update()
+
+                ydl_opts = {
+                    "format": formatos.get(qualidade, "best"),
+                    "outtmpl": os.path.join(pasta_download, "%(title)s.%(ext)s"),
+                    "progress_hooks": [progress_hook],
+                    "quiet": True,
+                }
+
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+
+                mostrar_status("Download finalizado! Salvo na pasta Downloads.", ft.Colors.GREEN_400)
+
+            except Exception as err:
+                mostrar_status(f"Erro no download: {str(err)}", ft.Colors.RED_400)
+            finally:
+                btn_baixar.disabled = False
+                progresso_bar.visible = False
+                page.update()
+
+        # Executa em thread paralela para a UI não travar
+        threading.Thread(target=rodar_download, daemon=True).start()
+
+    btn_baixar.on_click = ao_clicar_baixar
 
     aba_downloader = ft.Container(
         padding=10,
@@ -208,14 +251,9 @@ def main(page: ft.Page):
             ft.Text("YouTube Downloader", size=18, weight=ft.FontWeight.BOLD),
             input_url,
             dropdown_qualidade,
-            ft.Button(
-                "BAIXAR VÍDEO",
-                icon=ft.Icons.DOWNLOAD,
-                on_click=ao_clicar_baixar,
-                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
-                width=400,
-                height=45
-            )
+            btn_baixar,
+            progresso_bar,
+            progresso_texto,
         ], spacing=15)
     )
 
@@ -253,4 +291,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.app(target=main)
