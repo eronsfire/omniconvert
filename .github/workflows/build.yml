@@ -41,7 +41,7 @@ jobs:
 
       - name: Build APK
         run: |
-          flet build apk --target-arch arm64-v8a
+          flet build apk
           mv build/apk/*.apk "build/apk/Conversor Eronsfire.apk"
 
       - name: Create Release

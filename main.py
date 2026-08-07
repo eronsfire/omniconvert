@@ -6,7 +6,7 @@ from pdf2image import convert_from_path
 import yt_dlp
 import requests
 
-VERSION_ATUAL = "0.6"
+VERSION_ATUAL = "0.7"
 REPO_GITHUB = "eronsfire/omniconvert"  # Seu usuário/repositório
 
 
