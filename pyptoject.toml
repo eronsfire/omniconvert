@@ -1,0 +1,13 @@
+[tool.flet]
+name = "Conversor Eronsfire"
+
+[tool.flet.app]
+path = "."
+
+[tool.poetry.dependencies]
+python = "^3.11"
+flet = "*"
+pillow = "*"
+pdf2image = "*"
+yt-dlp = "*"
+requests = "*"
