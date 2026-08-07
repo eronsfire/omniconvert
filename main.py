@@ -1,12 +1,17 @@
 import os
+import urllib.request
 import flet as ft
 from PIL import Image
 from pdf2image import convert_from_path
 import yt_dlp
+import requests
+
+VERSION_ATUAL = "0.1"
+REPO_GITHUB = "eronsfire/omniconvert"  # Seu usuário/repositório
 
 
 def main(page: ft.Page):
-    page.title = "OmniConvert"
+    page.title = f"OmniConvert v{VERSION_ATUAL}"
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = 15
     page.scroll = ft.ScrollMode.AUTO
@@ -17,6 +22,46 @@ def main(page: ft.Page):
         txt_status.value = mensagem
         txt_status.color = cor
         page.update()
+
+    # ==========================================
+    # LÓGICA DE VERIFICAÇÃO DE ATUALIZAÇÕES
+    # ==========================================
+    def verificar_atualizacao(e=None):
+        mostrar_status("Buscando atualizações...", ft.Colors.AMBER_400)
+        try:
+            url_api = f"https://api.github.com/repos/{REPO_GITHUB}/releases/latest"
+            res = requests.get(url_api, timeout=5)
+
+            if res.status_code == 200:
+                dados = res.json()
+                tag_versao = dados.get("tag_name", "").replace("v", "").strip()
+
+                if tag_versao and tag_versao != VERSION_ATUAL:
+                    # Procura o arquivo .apk nos assets da release
+                    apk_url = None
+                    for asset in dados.get("assets", []):
+                        if asset.get("name", "").endswith(".apk"):
+                            apk_url = asset.get("browser_download_url")
+                            break
+
+                    if apk_url:
+                        mostrar_status(f"Nova versão v{tag_versao} encontrada! Baixando APK...", ft.Colors.BLUE_400)
+                        
+                        # Define pasta de Download do celular/PC
+                        pasta_dest = "/sdcard/Download" if os.path.exists("/sdcard/Download") else "."
+                        caminho_apk = os.path.join(pasta_dest, "omniconvert_update.apk")
+                        
+                        # Faz o download do APK
+                        urllib.request.urlretrieve(apk_url, caminho_apk)
+                        mostrar_status(f"APK v{tag_versao} baixado em:\n{caminho_apk}\nAbra o arquivo para instalar!", ft.Colors.GREEN_400)
+                    else:
+                        mostrar_status(f"Versão v{tag_versao} encontrada, mas o APK não foi anexado.", ft.Colors.ORANGE_400)
+                else:
+                    mostrar_status(f"Você já está na versão mais recente (v{VERSION_ATUAL}).", ft.Colors.GREEN_400)
+            else:
+                mostrar_status("Nenhuma atualização/release encontrada no GitHub.", ft.Colors.WHITE)
+        except Exception as err:
+            mostrar_status(f"Erro ao verificar atualização: {str(err)}", ft.Colors.RED_400)
 
     # ==========================================
     # LÓGICA DE CONVERSÃO DE ARQUIVOS
@@ -177,7 +222,7 @@ def main(page: ft.Page):
         ], spacing=15)
     )
 
-    # NAVEGAÇÃO
+    # NAVEGAÇÃO E ATUALIZAÇÕES
     conteudo_principal = ft.Container(content=aba_conversor, expand=True)
 
     def abrir_conversor(e):
@@ -192,6 +237,11 @@ def main(page: ft.Page):
         controls=[
             ft.Button("Conversor", icon=ft.Icons.SWAP_HORIZ, on_click=abrir_conversor),
             ft.Button("YouTube Downloader", icon=ft.Icons.VIDEO_LIBRARY, on_click=abrir_downloader),
+            ft.IconButton(
+                icon=ft.Icons.SYSTEM_UPDATE,
+                tooltip="Verificar Atualizações",
+                on_click=verificar_atualizacao
+            )
         ],
         alignment=ft.MainAxisAlignment.START,
     )
