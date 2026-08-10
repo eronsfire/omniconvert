@@ -1,12 +1,19 @@
 import os
+import glob
 import threading
 import requests
-import urllib.request
 import yt_dlp
 import flet as ft
 
-VERSION_ATUAL = "0.9.3"
+VERSION_ATUAL = "0.9.4"
 REPO_GITHUB = "eronsfire/omniconvert"
+
+def obter_pasta_downloads():
+    """ Tenta detectar a pasta Download da Memória Interna do Android. """
+    memoria_interna = "/storage/emulated/0/Download"
+    if os.path.exists(memoria_interna):
+        return memoria_interna
+    return "/sdcard/Download"
 
 def instalar_apk(caminho_apk):
     try:
@@ -15,7 +22,8 @@ def instalar_apk(caminho_apk):
             "am", "start",
             "-a", "android.intent.action.VIEW",
             "-d", f"file://{caminho_apk}",
-            "-t", "application/vnd.android.package-archive"
+            "-t", "application/vnd.android.package-archive",
+            "-f", "0x10000000"
         ]
         subprocess.run(cmd, check=True)
     except Exception:
@@ -30,20 +38,38 @@ def instalar_apk(caminho_apk):
 
             file = File(caminho_apk)
             intent = Intent(Intent.ACTION_VIEW)
-            intent.setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive")
+            
+            try:
+                Build = autoclass('android.os.Build$VERSION')
+                if Build.SDK_INT >= 24:
+                    PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                    context = PythonActivity.mActivity
+                    FileProvider = autoclass('androidx.core.content.FileProvider')
+                    uri = FileProvider.getUriForFile(
+                        context, 
+                        context.getPackageName() + ".fileprovider", 
+                        file
+                    )
+                    intent.setDataAndType(uri, "application/vnd.android.package-archive")
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                else:
+                    intent.setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive")
+            except Exception:
+                intent.setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive")
+
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             PythonActivity.mActivity.startActivity(intent)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Erro ao disparar instalador: {e}")
 
 def main(page: ft.Page):
     page.title = f"Conversor Eronsfire v{VERSION_ATUAL}"
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = {"left": 15, "top": 40, "right": 15, "bottom": 20}
 
-    # --- SELETOR DE ARQUIVOS (MODERNO E ASSÍNCRONO) ---
+    # --- SELETOR DE ARQUIVOS ---
     caminho_arquivo_selecionado = ""
     lbl_arquivo_selecionado = ft.Text("Nenhum arquivo selecionado.", italic=True, size=13)
 
@@ -108,7 +134,7 @@ def main(page: ft.Page):
         elif d['status'] == 'finished':
             progresso_bar.value = 1.0
             progresso_texto.value = "Download concluído! Processando arquivo..."
-            txt_status.value = "Download finalizado! Salvo em Downloads."
+            txt_status.value = "Download finalizado! Salvo na pasta Downloads."
             txt_status.color = ft.Colors.GREEN_400
             try:
                 progresso_bar.update()
@@ -119,64 +145,85 @@ def main(page: ft.Page):
 
     def verificar_atualizacao(e=None):
         mostrar_status("Buscando atualizações...", ft.Colors.AMBER_400)
-        try:
-            url_api = f"https://api.github.com/repos/{REPO_GITHUB}/releases/latest"
-            res = requests.get(url_api, timeout=5)
+        
+        def tarefa_atualizacao():
+            try:
+                url_api = f"https://api.github.com/repos/{REPO_GITHUB}/releases/latest"
+                res = requests.get(url_api, timeout=8)
 
-            if res.status_code == 200:
-                dados = res.json()
-                tag_versao = dados.get("tag_name", "").replace("v", "").strip()
+                if res.status_code == 200:
+                    dados = res.json()
+                    tag_versao = dados.get("tag_name", "").replace("v", "").strip()
 
-                if tag_versao and tag_versao != VERSION_ATUAL:
-                    apk_url = None
-                    for asset in dados.get("assets", []):
-                        if asset.get("name", "").endswith(".apk"):
-                            apk_url = asset.get("browser_download_url")
-                            break
+                    if tag_versao and tag_versao != VERSION_ATUAL:
+                        apk_url = None
+                        for asset in dados.get("assets", []):
+                            if asset.get("name", "").endswith(".apk"):
+                                apk_url = asset.get("browser_download_url")
+                                break
 
-                    if apk_url:
-                        mostrar_status(f"Nova versão v{tag_versao} encontrada! Baixando...", ft.Colors.BLUE_400)
-                        pasta_dest = "/sdcard/Download" if os.path.exists("/sdcard/Download") else "."
-                        caminho_apk = os.path.join(pasta_dest, "Conversor Eronsfire.apk")
+                        if apk_url:
+                            mostrar_status(f"Nova versão v{tag_versao} encontrada! Baixando...", ft.Colors.BLUE_400)
+                            
+                            pasta_dest = obter_pasta_downloads()
 
-                        if os.path.exists(caminho_apk):
+                            # Limpeza de APKs antigos do app
                             try:
-                                os.remove(caminho_apk)
+                                padrao_apks = os.path.join(pasta_dest, "Conversor_Eronsfire_*.apk")
+                                for apk_antigo in glob.glob(padrao_apks):
+                                    try:
+                                        os.remove(apk_antigo)
+                                    except Exception:
+                                        pass
                             except Exception:
                                 pass
 
-                        def progresso_apk(count, block_size, total_size):
-                            baixado = count * block_size
-                            porcentagem = (baixado / total_size) if total_size > 0 else 0
-                            mb_total = total_size / (1024 * 1024)
+                            nome_apk = f"Conversor_Eronsfire_v{tag_versao}.apk"
+                            caminho_apk = os.path.join(pasta_dest, nome_apk)
 
-                            progresso_bar.visible = True
-                            progresso_bar.value = porcentagem
-                            progresso_texto.value = f"{porcentagem*100:.1f}% de {mb_total:.1f} MB"
-                            
+                            def progresso_apk(baixado, total_size):
+                                porcentagem = (baixado / total_size) if total_size > 0 else 0
+                                mb_total = total_size / (1024 * 1024)
+
+                                progresso_bar.visible = True
+                                progresso_bar.value = porcentagem
+                                progresso_texto.value = f"{porcentagem*100:.1f}% de {mb_total:.1f} MB"
+                                
+                                try:
+                                    progresso_bar.update()
+                                    progresso_texto.update()
+                                except Exception:
+                                    page.update()
+
+                            with requests.get(apk_url, stream=True, timeout=30) as r:
+                                r.raise_for_status()
+                                total_length = int(r.headers.get('content-length', 0))
+                                baixado = 0
+                                with open(caminho_apk, 'wb') as f:
+                                    for chunk in r.iter_content(chunk_size=8192):
+                                        if chunk:
+                                            f.write(chunk)
+                                            baixado += len(chunk)
+                                            progresso_apk(baixado, total_length)
+
+                            progresso_bar.visible = False
                             try:
                                 progresso_bar.update()
-                                progresso_texto.update()
                             except Exception:
                                 page.update()
 
-                        urllib.request.urlretrieve(apk_url, caminho_apk, reporthook=progresso_apk)
-                        progresso_bar.visible = False
-                        try:
-                            progresso_bar.update()
-                        except Exception:
-                            page.update()
-
-                        mostrar_status(f"Download da v{tag_versao} concluído!\nAbrindo instalador...", ft.Colors.GREEN_400)
-                        instalar_apk(caminho_apk)
+                            mostrar_status(f"Download da v{tag_versao} concluído!\nAbrindo instalador...", ft.Colors.GREEN_400)
+                            instalar_apk(caminho_apk)
+                        else:
+                            mostrar_status(f"Versão v{tag_versao} encontrada, mas o APK não foi anexado no GitHub.", ft.Colors.ORANGE_400)
                     else:
-                        mostrar_status(f"Versão v{tag_versao} encontrada, mas o APK não foi anexado.", ft.Colors.ORANGE_400)
+                        mostrar_status(f"Você já está na versão mais recente (v{VERSION_ATUAL}).", ft.Colors.GREEN_400)
                 else:
-                    mostrar_status(f"Você já está na versão mais recente (v{VERSION_ATUAL}).", ft.Colors.GREEN_400)
-            else:
-                mostrar_status("Nenhuma atualização/release encontrada no GitHub.", ft.Colors.WHITE)
-        except Exception as err:
-            mostrar_status(f"Erro ao verificar atualização: {str(err)}", ft.Colors.RED_400)
+                    mostrar_status("Nenhuma atualização encontrada no GitHub.", ft.Colors.WHITE)
+            except Exception as err:
+                mostrar_status(f"Erro ao verificar atualização: {str(err)}", ft.Colors.RED_400)
+
+        threading.Thread(target=tarefa_atualizacao, daemon=True).start()
 
     # --- ABA 1: CONVERTER ARQUIVOS LOCAIS ---
     dd_formato_destino = ft.Dropdown(
@@ -201,21 +248,34 @@ def main(page: ft.Page):
         fmt = dd_formato_destino.value
         mostrar_status(f"Iniciando conversão para .{fmt}...", ft.Colors.AMBER_400)
         
-        def rodar_ffmpeg():
+        def rodar_conversao():
             try:
-                import subprocess
-                pasta_dest = "/sdcard/Download" if os.path.exists("/sdcard/Download") else os.path.dirname(caminho_arquivo_selecionado)
+                pasta_dest = obter_pasta_downloads()
                 nome_base = os.path.splitext(os.path.basename(caminho_arquivo_selecionado))[0]
                 arquivo_saida = os.path.join(pasta_dest, f"{nome_base}_convertido.{fmt}")
 
-                cmd = ["ffmpeg", "-y", "-i", caminho_arquivo_selecionado, arquivo_saida]
-                subprocess.run(cmd, check=True)
+                ydl_opts = {
+                    'outtmpl': arquivo_saida,
+                    'format': 'best',
+                    'postprocessors': [],
+                    'quiet': True,
+                }
+
+                if fmt in ["mp3", "m4a", "wav"]:
+                    ydl_opts['postprocessors'].append({
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': fmt,
+                        'preferredquality': '192',
+                    })
+
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([f"file:{caminho_arquivo_selecionado}"])
                 
                 mostrar_status(f"Conversão concluída!\nSalvo em: {arquivo_saida}", ft.Colors.GREEN_400)
             except Exception as err:
                 mostrar_status(f"Erro na conversão: {str(err)}", ft.Colors.RED_400)
 
-        threading.Thread(target=rodar_ffmpeg, daemon=True).start()
+        threading.Thread(target=rodar_conversao, daemon=True).start()
 
     btn_executar_conversao = ft.Button(
         "Converter Agora", 
@@ -267,7 +327,7 @@ def main(page: ft.Page):
         }
 
         formato_escolhido = formatos.get(qualidade, "best")
-        pasta_dest = "/sdcard/Download" if os.path.exists("/sdcard/Download") else "."
+        pasta_dest = obter_pasta_downloads()
 
         progresso_bar.visible = True
         progresso_bar.value = 0
@@ -282,17 +342,19 @@ def main(page: ft.Page):
                 'nocheckcertificate': True,
                 'quiet': True,
                 'noprogress': True,
+                'check_formats': False,
+                # Usa clientes que ainda não exigem o cálculo do PO Token via JS
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['android', 'ios']
+                        'player_client': ['web_creator', 'android'],
+                        'player_skip': ['js', 'configs', 'webpage'],
                     }
+                },
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Android 14; Mobile; rv:124.0) Gecko/124.0 Firefox/124.0',
+                    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
                 }
             }
-
-            try:
-                ydl_opts['cookiesfrombrowser'] = ('chrome',)
-            except Exception:
-                pass
 
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -355,7 +417,7 @@ def main(page: ft.Page):
         }
         
         formato_escolhido = formatos.get(qualidade, "best")
-        pasta_dest = "/sdcard/Download" if os.path.exists("/sdcard/Download") else "."
+        pasta_dest = obter_pasta_downloads()
 
         progresso_bar.visible = True
         progresso_bar.value = 0
@@ -370,13 +432,10 @@ def main(page: ft.Page):
                 'nocheckcertificate': True,
                 'quiet': True,
                 'noprogress': True,
-                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                }
             }
-            
-            try:
-                ydl_opts['cookiesfrombrowser'] = ('chrome',)
-            except Exception:
-                pass
 
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
