@@ -5,7 +5,7 @@ import urllib.request
 import yt_dlp
 import flet as ft
 
-VERSION_ATUAL = "0.9.2"
+VERSION_ATUAL = "0.9.3"
 REPO_GITHUB = "eronsfire/omniconvert"
 
 def instalar_apk(caminho_apk):
@@ -43,12 +43,32 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = {"left": 15, "top": 40, "right": 15, "bottom": 20}
 
-    # --- COMPONENTES DE PROGRESSO IGUAIS AO SEU CÓDIGO ANTIGO ---
+    # --- SELETOR DE ARQUIVOS (MODERNO E ASSÍNCRONO) ---
+    caminho_arquivo_selecionado = ""
+    lbl_arquivo_selecionado = ft.Text("Nenhum arquivo selecionado.", italic=True, size=13)
+
+    async def abrir_seletor_arquivo(e):
+        nonlocal caminho_arquivo_selecionado
+        files = await ft.FilePicker().pick_files(allow_multiple=False)
+        if files and len(files) > 0:
+            caminho_arquivo_selecionado = files[0].path
+            lbl_arquivo_selecionado.value = f"Arquivo: {files[0].name}"
+            mostrar_status("Arquivo selecionado com sucesso!", ft.Colors.GREEN_400)
+        else:
+            lbl_arquivo_selecionado.value = "Seleção cancelada."
+            page.update()
+
+    btn_selecionar_file = ft.Button(
+        "Selecionar Arquivo",
+        icon=ft.Icons.FOLDER_OPEN,
+        on_click=abrir_seletor_arquivo
+    )
+
+    # --- COMPONENTES DE PROGRESSO ---
     progresso_bar = ft.ProgressBar(value=0, visible=False, color=ft.Colors.BLUE_400)
     progresso_texto = ft.Text("", size=12, color=ft.Colors.GREY_400)
     txt_status = ft.Text(value="", size=13, selectable=True)
 
-    # Contêiner do rodapé adicionando os componentes corretos
     container_status = ft.Container(
         content=ft.Column([
             progresso_bar,
@@ -72,16 +92,13 @@ def main(page: ft.Page):
             speed = d.get('speed', 0) or 0
 
             porcentagem = (downloaded / total) if total > 0 else 0
-            mb_downloaded = downloaded / (1024 * 1024)
             mb_total = total / (1024 * 1024)
             mb_speed = speed / (1024 * 1024)
 
-            # Atualiza os componentes diretamente
             progresso_bar.visible = True
             progresso_bar.value = porcentagem
             progresso_texto.value = f"{porcentagem*100:.1f}% de {mb_total:.1f} MB ({mb_speed:.2f} MB/s)"
             
-            # Força a renderização imediata na tela
             try:
                 progresso_bar.update()
                 progresso_texto.update()
@@ -122,7 +139,6 @@ def main(page: ft.Page):
                         pasta_dest = "/sdcard/Download" if os.path.exists("/sdcard/Download") else "."
                         caminho_apk = os.path.join(pasta_dest, "Conversor Eronsfire.apk")
 
-                        # Remove o APK antigo da pasta caso já exista um
                         if os.path.exists(caminho_apk):
                             try:
                                 os.remove(caminho_apk)
@@ -132,14 +148,12 @@ def main(page: ft.Page):
                         def progresso_apk(count, block_size, total_size):
                             baixado = count * block_size
                             porcentagem = (baixado / total_size) if total_size > 0 else 0
-                            mb_baixado = baixado / (1024 * 1024)
                             mb_total = total_size / (1024 * 1024)
 
                             progresso_bar.visible = True
                             progresso_bar.value = porcentagem
                             progresso_texto.value = f"{porcentagem*100:.1f}% de {mb_total:.1f} MB"
                             
-                            # Atualização direta na interface
                             try:
                                 progresso_bar.update()
                                 progresso_texto.update()
@@ -165,9 +179,6 @@ def main(page: ft.Page):
             mostrar_status(f"Erro ao verificar atualização: {str(err)}", ft.Colors.RED_400)
 
     # --- ABA 1: CONVERTER ARQUIVOS LOCAIS ---
-    caminho_arquivo_selecionado = ""
-    lbl_arquivo_selecionado = ft.Text("Nenhum arquivo selecionado.", italic=True, size=13)
-    
     dd_formato_destino = ft.Dropdown(
         label="Formato de Destino",
         width=250,
@@ -180,22 +191,6 @@ def main(page: ft.Page):
             ft.dropdown.Option("wav", "WAV (Áudio)"),
         ],
         value="mp3"
-    )
-
-    def resultado_selecao_arquivo(e):
-        nonlocal caminho_arquivo_selecionado
-        if e.files and len(e.files) > 0:
-            caminho_arquivo_selecionado = e.files[0].path
-            lbl_arquivo_selecionado.value = f"Arquivo: {e.files[0].name}"
-            mostrar_status("Arquivo selecionado com sucesso!", ft.Colors.GREEN_400)
-        else:
-            lbl_arquivo_selecionado.value = "Seleção cancelada."
-            page.update()
-
-    btn_selecionar_file = ft.ElevatedButton(
-        "Selecionar Arquivo",
-        icon=ft.Icons.FOLDER_OPEN,
-        on_click=lambda _: page.pick_files(on_result=resultado_selecao_arquivo, allow_multiple=False)
     )
 
     def converter_arquivo(e):
@@ -222,7 +217,11 @@ def main(page: ft.Page):
 
         threading.Thread(target=rodar_ffmpeg, daemon=True).start()
 
-    btn_executar_conversao = ft.ElevatedButton("Converter Agora", icon=ft.Icons.TRANSFORM, on_click=converter_arquivo)
+    btn_executar_conversao = ft.Button(
+        "Converter Agora", 
+        icon=ft.Icons.TRANSFORM, 
+        on_click=converter_arquivo
+    )
 
     conteudo_converter = ft.Column([
         ft.Text("Conversor de Mídia Local", size=18, weight=ft.FontWeight.BOLD),
@@ -283,7 +282,6 @@ def main(page: ft.Page):
                 'nocheckcertificate': True,
                 'quiet': True,
                 'noprogress': True,
-                # 1. Simula os apps mobile (evita bloqueio sem precisar de conta)
                 'extractor_args': {
                     'youtube': {
                         'player_client': ['android', 'ios']
@@ -291,15 +289,27 @@ def main(page: ft.Page):
                 }
             }
 
-            # 2. Se estiver rodando no PC/VS Code, puxa os cookies do navegador se necessário
             try:
-                ydl_opts['cookiesfrombrowser'] = ('chrome',) # ou 'firefox', 'edge'
+                ydl_opts['cookiesfrombrowser'] = ('chrome',)
             except Exception:
                 pass
 
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+            except Exception as err:
+                mostrar_status(f"Erro ao baixar YouTube: {str(err)}", ft.Colors.RED_400)
+            finally:
+                progresso_bar.visible = False
+                page.update()
+
         threading.Thread(target=tarefa_download, daemon=True).start()
 
-    btn_baixar_yt = ft.ElevatedButton("Baixar YouTube", icon=ft.Icons.DOWNLOAD, on_click=executar_download_yt)
+    btn_baixar_yt = ft.Button(
+        "Baixar YouTube", 
+        icon=ft.Icons.DOWNLOAD, 
+        on_click=executar_download_yt
+    )
 
     conteudo_yt = ft.Column([
         ft.Text("Download do YouTube", size=18, weight=ft.FontWeight.BOLD),
@@ -360,11 +370,9 @@ def main(page: ft.Page):
                 'nocheckcertificate': True,
                 'quiet': True,
                 'noprogress': True,
-                # User agent para evitar bloqueio nessas redes:
                 'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             }
             
-            # Tenta ler cookies se disponível no PC
             try:
                 ydl_opts['cookiesfrombrowser'] = ('chrome',)
             except Exception:
@@ -381,7 +389,11 @@ def main(page: ft.Page):
 
         threading.Thread(target=tarefa_download_social, daemon=True).start()
 
-    btn_baixar_social = ft.ElevatedButton("Baixar Mídia", icon=ft.Icons.DOWNLOAD, on_click=executar_download_social)
+    btn_baixar_social = ft.Button(
+        "Baixar Mídia", 
+        icon=ft.Icons.DOWNLOAD, 
+        on_click=executar_download_social
+    )
 
     conteudo_social = ft.Column([
         ft.Text("Download Instagram & TikTok", size=18, weight=ft.FontWeight.BOLD),
