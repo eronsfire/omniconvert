@@ -101,17 +101,19 @@ def main(page: ft.Page):
     btn_atualizar.on_click = verificar_atualizacao
 
     def mapear_formato(qualidade: str, eh_social: bool = False) -> str:
+        if qualidade == "Apenas Áudio (MP3)":
+            return "mp3"
+
         formatos = {
-            "Melhor Qualidade (Máxima)": "best",
-            "2160p (4K)": "best[height<=2160]",
-            "1440p (2K)": "best[height<=1440]",
-            "1080p (Full HD)": "best[height<=1080]",
-            "720p (HD)": "best[height<=720]",
-            "480p (SD)": "best[height<=480]",
-            "360p (Baixa)": "best[height<=360]",
-            "Apenas Áudio (MP3)": "ba[ext=m4a]/ba[ext=mp3]/ba/best" if eh_social else "bestaudio/best",
+            "Melhor Qualidade (Máxima)": "bestvideo+bestaudio/best",
+            "2160p (4K)": "bestvideo[height<=2160]+bestaudio/best[height<=2160]/best",
+            "1440p (2K)": "bestvideo[height<=1440]+bestaudio/best[height<=1440]/best",
+            "1080p (Full HD)": "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+            "720p (HD)": "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+            "480p (SD)": "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
+            "360p (Baixa)": "bestvideo[height<=360]+bestaudio/best[height<=360]/best",
         }
-        return formatos.get(qualidade, "best")
+        return formatos.get(qualidade, "bestvideo+bestaudio/best")
 
     def disparar_download(url: str, qualidade: str, eh_social: bool = False):
         if not url:
@@ -208,7 +210,7 @@ def main(page: ft.Page):
         )
     )
 
-    # --- RODAPÉ COM SELO DE AUTENTICIDADE (CANTO DIREITO INFERIOR) ---
+    # --- RODAPÉ COM SELO DE AUTENTICIDADE ---
     rodape = ft.Row(
         controls=[
             ft.Icon(ft.Icons.VERIFIED_USER_OUTLINED, size=12, color=ft.Colors.BLUE_400),

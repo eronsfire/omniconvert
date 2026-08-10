@@ -1,4 +1,6 @@
 import os
+import sys
+import stat
 import yt_dlp
 from utils import obter_pasta_downloads
 
@@ -7,12 +9,29 @@ class VideoDownloader:
         self.mostrar_status = callback_status
         self.progress_hook = callback_progress
 
+    def _obter_caminho_ffmpeg(self):
+        """Localiza o FFmpeg na pasta assets e concede permissão no Android."""
+        base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+        ffmpeg_bin = os.path.join(base_path, "assets", "ffmpeg", "ffmpeg")
+
+        if os.path.exists(ffmpeg_bin):
+            try:
+                # Concede permissão de execução (chmod +x) no Linux/Android
+                st = os.stat(ffmpeg_bin)
+                os.chmod(ffmpeg_bin, st.st_mode | stat.S_IEXEC)
+                return ffmpeg_bin
+            except Exception as e:
+                print(f"Aviso ao atribuir permissão no FFmpeg: {e}")
+                return ffmpeg_bin
+
+        return None
+
     def baixar_midia(self, url: str, formato_escolhido: str, eh_social: bool = False):
-        """Baixa mídias das redes suportadas."""
+        """Baixa mídias e realiza a conversão para MP3 ou junção de vídeo HD em MP4."""
         pasta_dest = obter_pasta_downloads()
+        caminho_ffmpeg = self._obter_caminho_ffmpeg()
 
         ydl_opts = {
-            'format': formato_escolhido,
             'outtmpl': os.path.join(pasta_dest, '%(title)s.%(ext)s'),
             'progress_hooks': [self.progress_hook],
             'nocheckcertificate': True,
@@ -20,15 +39,25 @@ class VideoDownloader:
             'noprogress': True,
         }
 
-        # Converte automaticamente para MP3 se o formato escolhido for de áudio
-        if "bestaudio" in formato_escolhido or "ba" in formato_escolhido:
+        # Aponta o diretório do FFmpeg se ele estiver presente nos assets
+        if caminho_ffmpeg:
+            ydl_opts['ffmpeg_location'] = os.path.dirname(caminho_ffmpeg)
+
+        # --- SELEÇÃO DE FORMATOS ---
+        if "bestaudio" in formato_escolhido or "ba" in formato_escolhido or formato_escolhido == "mp3":
+            # Baixa o melhor áudio e converte para MP3 192kbps
             ydl_opts['format'] = 'bestaudio/best'
             ydl_opts['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }]
+        else:
+            # Baixa a melhor qualidade de vídeo + áudio e junta em MP4 (1080p, 2K, 4K)
+            ydl_opts['format'] = 'bestvideo+bestaudio/best'
+            ydl_opts['merge_output_format'] = 'mp4'
 
+        # --- CABEÇALHOS E EXTRATORES ---
         if eh_social:
             ydl_opts.update({
                 'no_warnings': True,
