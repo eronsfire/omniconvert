@@ -1,10 +1,11 @@
 import threading
 import flet as ft
 from downloader import VideoDownloader
-from updater import AppUpdater, VERSION_ATUAL
+from updater import AppUpdater
+from config import APP_VERSION
 
 def main(page: ft.Page):
-    page.title = f"Downloader Eronsfire v{VERSION_ATUAL}"
+    page.title = f"Downloader Eronsfire v{APP_VERSION}"
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = {"left": 15, "top": 40, "right": 15, "bottom": 20}
 
