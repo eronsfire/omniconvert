@@ -5,7 +5,7 @@ import urllib.request
 import yt_dlp
 import flet as ft
 
-VERSION_ATUAL = "0.9.1"
+VERSION_ATUAL = "0.9.2"
 REPO_GITHUB = "eronsfire/omniconvert"
 
 def instalar_apk(caminho_apk):
@@ -121,20 +121,38 @@ def main(page: ft.Page):
                         mostrar_status(f"Nova versão v{tag_versao} encontrada! Baixando...", ft.Colors.BLUE_400)
                         pasta_dest = "/sdcard/Download" if os.path.exists("/sdcard/Download") else "."
                         caminho_apk = os.path.join(pasta_dest, "Conversor Eronsfire.apk")
-                        
+
+                        # Remove o APK antigo da pasta caso já exista um
+                        if os.path.exists(caminho_apk):
+                            try:
+                                os.remove(caminho_apk)
+                            except Exception:
+                                pass
+
                         def progresso_apk(count, block_size, total_size):
                             baixado = count * block_size
                             porcentagem = (baixado / total_size) if total_size > 0 else 0
                             mb_baixado = baixado / (1024 * 1024)
                             mb_total = total_size / (1024 * 1024)
-                            
+
                             progresso_bar.visible = True
                             progresso_bar.value = porcentagem
                             progresso_texto.value = f"{porcentagem*100:.1f}% de {mb_total:.1f} MB"
-                            mostrar_status(f"Baixando Atualização v{tag_versao}...", ft.Colors.BLUE_400)
+                            
+                            # Atualização direta na interface
+                            try:
+                                progresso_bar.update()
+                                progresso_texto.update()
+                            except Exception:
+                                page.update()
 
                         urllib.request.urlretrieve(apk_url, caminho_apk, reporthook=progresso_apk)
                         progresso_bar.visible = False
+                        try:
+                            progresso_bar.update()
+                        except Exception:
+                            page.update()
+
                         mostrar_status(f"Download da v{tag_versao} concluído!\nAbrindo instalador...", ft.Colors.GREEN_400)
                         instalar_apk(caminho_apk)
                     else:
@@ -292,13 +310,18 @@ def main(page: ft.Page):
 
     # --- ABA 3: INSTAGRAM / TIKTOK DOWNLOADER ---
     txt_url_social = ft.TextField(label="Link do Instagram ou TikTok", expand=True)
+    
     dropdown_qualidade_social = ft.Dropdown(
         label="Qualidade / Formato",
         options=[
             ft.dropdown.Option("Melhor Qualidade (Máxima)"),
+            ft.dropdown.Option("2160p (4K)"),
+            ft.dropdown.Option("1440p (2K)"),
             ft.dropdown.Option("1080p (Full HD)"),
             ft.dropdown.Option("720p (HD)"),
-            ft.dropdown.Option("Apenas Áudio"),
+            ft.dropdown.Option("480p (SD)"),
+            ft.dropdown.Option("360p (Baixa)"),
+            ft.dropdown.Option("Apenas Áudio (MP3)"),
         ],
         value="Melhor Qualidade (Máxima)"
     )
@@ -312,9 +335,13 @@ def main(page: ft.Page):
         qualidade = dropdown_qualidade_social.value
         formatos = {
             "Melhor Qualidade (Máxima)": "best",
+            "2160p (4K)": "best[height<=2160]",
+            "1440p (2K)": "best[height<=1440]",
             "1080p (Full HD)": "best[height<=1080]",
             "720p (HD)": "best[height<=720]",
-            "Apenas Áudio": "bestaudio/best",
+            "480p (SD)": "best[height<=480]",
+            "360p (Baixa)": "best[height<=360]",
+            "Apenas Áudio (MP3)": "bestaudio/best",
         }
         
         formato_escolhido = formatos.get(qualidade, "best")
@@ -323,15 +350,26 @@ def main(page: ft.Page):
         progresso_bar.visible = True
         progresso_bar.value = 0
         progresso_texto.value = "Iniciando download..."
-        mostrar_status("Iniciando download...", ft.Colors.AMBER_400)
+        mostrar_status(f"Iniciando download ({qualidade})...", ft.Colors.AMBER_400)
 
         def tarefa_download_social():
             ydl_opts = {
                 'format': formato_escolhido,
                 'outtmpl': os.path.join(pasta_dest, '%(title)s.%(ext)s'),
                 'progress_hooks': [progress_hook],
-                'nocheckcertificate': True
+                'nocheckcertificate': True,
+                'quiet': True,
+                'noprogress': True,
+                # User agent para evitar bloqueio nessas redes:
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             }
+            
+            # Tenta ler cookies se disponível no PC
+            try:
+                ydl_opts['cookiesfrombrowser'] = ('chrome',)
+            except Exception:
+                pass
+
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
