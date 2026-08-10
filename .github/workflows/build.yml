@@ -22,6 +22,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # Configura o Android SDK e aceita TODAS as licenças automaticamente
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Cache Flutter SDK
         uses: actions/cache@v4
         with:
@@ -34,8 +38,10 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Accept Android Licenses
-        run: yes | flutter doctor --android-licenses || true
+      - name: Decode Keystore Secret
+        run: |
+          mkdir -p android/app
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
 
       - name: Install dependencies
         run: |
@@ -45,7 +51,11 @@ jobs:
       - name: Build APK
         run: |
           flet build apk \
-            --android-permissions android.permission.REQUEST_INSTALL_PACKAGES android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE android.permission.INTERNET
+            --android-permissions android.permission.REQUEST_INSTALL_PACKAGES android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE android.permission.INTERNET \
+            --android-signing-key-store android/app/upload-keystore.jks \
+            --android-signing-key-store-password "${{ secrets.KEYSTORE_PASSWORD }}" \
+            --android-signing-key-alias "${{ secrets.KEY_ALIAS }}" \
+            --android-signing-key-password "${{ secrets.KEY_PASSWORD }}"
           
           mv build/apk/*.apk "build/apk/Conversor_Eronsfire.apk"
 
