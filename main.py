@@ -262,16 +262,22 @@ def main(page: ft.Page):
                 'format': formato_escolhido,
                 'outtmpl': os.path.join(pasta_dest, '%(title)s.%(ext)s'),
                 'progress_hooks': [progress_hook],
-                'nocheckcertificate': True
+                'nocheckcertificate': True,
+                'quiet': True,
+                'noprogress': True,
+                # 1. Simula os apps mobile (evita bloqueio sem precisar de conta)
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'ios']
+                    }
+                }
             }
+
+            # 2. Se estiver rodando no PC/VS Code, puxa os cookies do navegador se necessário
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
-            except Exception as err:
-                mostrar_status(f"Erro no download: {str(err)}", ft.Colors.RED_400)
-            finally:
-                progresso_bar.visible = False
-                page.update()
+                ydl_opts['cookiesfrombrowser'] = ('chrome',) # ou 'firefox', 'edge'
+            except Exception:
+                pass
 
         threading.Thread(target=tarefa_download, daemon=True).start()
 
