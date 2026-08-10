@@ -10,18 +10,17 @@ class VideoDownloader:
         self.progress_hook = callback_progress
 
     def _obter_caminho_ffmpeg(self):
-        """Localiza o FFmpeg na pasta assets e concede permissão no Android."""
+        """Localiza o FFmpeg e garante permissão de execução no Android."""
         base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
         ffmpeg_bin = os.path.join(base_path, "assets", "ffmpeg", "ffmpeg")
 
         if os.path.exists(ffmpeg_bin):
             try:
-                # Concede permissão de execução (chmod +x) no Linux/Android
-                st = os.stat(ffmpeg_bin)
-                os.chmod(ffmpeg_bin, st.st_mode | stat.S_IEXEC)
+                # Garante permissão total de leitura, escrita e execução (rwxr-xr-x)
+                os.chmod(ffmpeg_bin, 0o755)
                 return ffmpeg_bin
             except Exception as e:
-                print(f"Aviso ao atribuir permissão no FFmpeg: {e}")
+                print(f"Erro ao aplicar chmod no FFmpeg: {e}")
                 return ffmpeg_bin
 
         return None
@@ -37,11 +36,12 @@ class VideoDownloader:
             'nocheckcertificate': True,
             'quiet': True,
             'noprogress': True,
+            'prefer_ffmpeg': True,  # Força o uso estrito do FFmpeg local
         }
 
-        # Aponta o diretório do FFmpeg se ele estiver presente nos assets
+        # Aponta explicitamente o executável e a pasta onde ele se encontra
         if caminho_ffmpeg:
-            ydl_opts['ffmpeg_location'] = os.path.dirname(caminho_ffmpeg)
+            ydl_opts['ffmpeg_location'] = caminho_ffmpeg
 
         # --- SELEÇÃO DE FORMATOS ---
         if "bestaudio" in formato_escolhido or "ba" in formato_escolhido or formato_escolhido == "mp3":
