@@ -35,7 +35,7 @@ jobs:
           cache: true
 
       - name: Accept Android Licenses
-        run: y | flutter doctor --android-licenses || true
+        run: yes | flutter doctor --android-licenses || true
 
       - name: Install dependencies
         run: |
