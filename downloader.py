@@ -20,6 +20,15 @@ class VideoDownloader:
             'noprogress': True,
         }
 
+        # Converte automaticamente para MP3 se o formato escolhido for de áudio
+        if "bestaudio" in formato_escolhido or "ba" in formato_escolhido:
+            ydl_opts['format'] = 'bestaudio/best'
+            ydl_opts['postprocessors'] = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }]
+
         if eh_social:
             ydl_opts.update({
                 'no_warnings': True,
