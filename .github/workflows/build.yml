@@ -61,6 +61,7 @@ jobs:
         run: |
           flet build apk \
             --verbose \
+            --flutter-build-args="--verbose" \
             --android-signing-key-store android/app/upload-keystore.jks \
             --android-signing-key-store-password "${{ secrets.KEYSTORE_PASSWORD }}" \
             --android-signing-key-alias "${{ secrets.KEY_ALIAS }}" \
