@@ -42,11 +42,7 @@ jobs:
       - name: Build APK
         run: |
           flet build apk \
-            --split-per-abi \
-            --permissions REQUEST_INSTALL_PACKAGES \
-            --permissions WRITE_EXTERNAL_STORAGE \
-            --permissions READ_EXTERNAL_STORAGE \
-            --permissions INTERNET
+            --permissions REQUEST_INSTALL_PACKAGES,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET
           
           mv build/apk/*.apk "build/apk/Conversor_Eronsfire.apk"
 
