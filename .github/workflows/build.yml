@@ -11,6 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev ninja-build
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -37,6 +42,11 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Configure Flutter
+        run: |
+          flutter config --no-enable-linux-desktop
+          flutter config --enable-android
+
       - name: Decode Keystore Secret
         run: |
           mkdir -p android/app
@@ -50,6 +60,7 @@ jobs:
       - name: Build APK
         run: |
           flet build apk \
+            --verbose \
             --android-signing-key-store android/app/upload-keystore.jks \
             --android-signing-key-store-password "${{ secrets.KEYSTORE_PASSWORD }}" \
             --android-signing-key-alias "${{ secrets.KEY_ALIAS }}" \
