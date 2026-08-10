@@ -22,7 +22,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # Configura o Android SDK e aceita TODAS as licenças automaticamente
+      # Configura o Android SDK e aceita todas as licenças automaticamente
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
@@ -51,7 +51,7 @@ jobs:
       - name: Build APK
         run: |
           flet build apk \
-            --android-permissions android.permission.REQUEST_INSTALL_PACKAGES android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE android.permission.INTERNET \
+            --android-permissions REQUEST_INSTALL_PACKAGES WRITE_EXTERNAL_STORAGE READ_EXTERNAL_STORAGE INTERNET \
             --android-signing-key-store android/app/upload-keystore.jks \
             --android-signing-key-store-password "${{ secrets.KEYSTORE_PASSWORD }}" \
             --android-signing-key-alias "${{ secrets.KEY_ALIAS }}" \
