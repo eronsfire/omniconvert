@@ -41,12 +41,18 @@ jobs:
 
       - name: Build APK
         run: |
-          flet build apk
-          mv build/apk/*.apk "build/apk/Conversor Eronsfire.apk"
+          flet build apk \
+            --split-per-abi \
+            --permissions REQUEST_INSTALL_PACKAGES \
+            --permissions WRITE_EXTERNAL_STORAGE \
+            --permissions READ_EXTERNAL_STORAGE \
+            --permissions INTERNET
+          
+          mv build/apk/*.apk "build/apk/Conversor_Eronsfire.apk"
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: build/apk/Conversor Eronsfire.apk
+          files: build/apk/Conversor_Eronsfire.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
