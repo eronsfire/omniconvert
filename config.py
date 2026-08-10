@@ -1,6 +1,6 @@
 import os
 
-APP_VERSION = "0.9.8.8"
+APP_VERSION = "0.9.8.9"
 GITHUB_REPO = "eronsfire/omniconvert"
 DOWNLOAD_DIR_FALLBACK = "/sdcard/Download"
 

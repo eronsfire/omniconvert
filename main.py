@@ -7,7 +7,7 @@ from config import APP_VERSION
 def main(page: ft.Page):
     page.title = f"Downloader Eronsfire v{APP_VERSION}"
     page.theme_mode = ft.ThemeMode.DARK
-    page.padding = {"left": 15, "top": 40, "right": 15, "bottom": 20}
+    page.padding = {"left": 15, "top": 40, "right": 15, "bottom": 10}
 
     # --- UI STATUS & PROGRESSO ---
     progresso_bar = ft.ProgressBar(value=0, visible=False, color=ft.Colors.BLUE_400)
@@ -20,8 +20,8 @@ def main(page: ft.Page):
             progresso_texto,
             txt_status
         ], spacing=5),
-        padding={"left": 5, "top": 5, "right": 5, "bottom": 10},
-        height=105,
+        padding={"left": 5, "top": 5, "right": 5, "bottom": 5},
+        height=95,
         alignment=ft.Alignment(-1, -1)
     )
 
@@ -62,13 +62,21 @@ def main(page: ft.Page):
             except Exception:
                 page.update()
 
-    # Instanciando os serviços separados
+    # Instanciando os serviços
     downloader_service = VideoDownloader(mostrar_status, progress_hook)
     updater_service = AppUpdater(mostrar_status)
+
+    # --- BOTÃO DE ATUALIZAÇÃO ---
+    btn_atualizar = ft.IconButton(
+        icon=ft.Icons.SYSTEM_UPDATE,
+        tooltip="Buscar Atualização"
+    )
 
     # --- EVENTOS ---
     def verificar_atualizacao(e=None):
         mostrar_status("Buscando atualizações...")
+        btn_atualizar.disabled = True
+        page.update()
         
         def progresso_apk(baixado, total_size):
             porcentagem = (baixado / total_size) if total_size > 0 else 0
@@ -79,11 +87,18 @@ def main(page: ft.Page):
             page.update()
 
         def tarefa():
-            updater_service.checar_atualizacao(progresso_apk)
-            progresso_bar.visible = False
-            page.update()
+            try:
+                updater_service.checar_e_atualizar(progresso_apk)
+            except Exception as err:
+                mostrar_status(f"Erro na busca: {err}", e_erro=True)
+            finally:
+                progresso_bar.visible = False
+                btn_atualizar.disabled = False
+                page.update()
 
         threading.Thread(target=tarefa, daemon=True).start()
+
+    btn_atualizar.on_click = verificar_atualizacao
 
     def mapear_formato(qualidade: str, eh_social: bool = False) -> str:
         formatos = {
@@ -110,9 +125,13 @@ def main(page: ft.Page):
         mostrar_status(f"Iniciando download ({qualidade})...")
 
         def tarefa():
-            downloader_service.baixar_midia(url, fmt, eh_social)
-            progresso_bar.visible = False
-            page.update()
+            try:
+                downloader_service.baixar_midia(url, fmt, eh_social)
+            except Exception as err:
+                mostrar_status(f"Erro no download: {err}", e_erro=True)
+            finally:
+                progresso_bar.visible = False
+                page.update()
 
         threading.Thread(target=tarefa, daemon=True).start()
 
@@ -167,12 +186,6 @@ def main(page: ft.Page):
     ], spacing=15, scroll=ft.ScrollMode.AUTO)
 
     # --- TABS E ESTRUTURA ---
-    btn_atualizar = ft.IconButton(
-        icon=ft.Icons.SYSTEM_UPDATE,
-        tooltip="Buscar Atualização",
-        on_click=verificar_atualizacao
-    )
-
     tabs_control = ft.Tabs(
         length=2,
         selected_index=0,
@@ -195,15 +208,32 @@ def main(page: ft.Page):
         )
     )
 
+    # --- RODAPÉ COM SELO DE AUTENTICIDADE (CANTO DIREITO INFERIOR) ---
+    rodape = ft.Row(
+        controls=[
+            ft.Icon(ft.Icons.VERIFIED_USER_OUTLINED, size=12, color=ft.Colors.BLUE_400),
+            ft.Text(
+                "2026© Willian Lima", 
+                size=11, 
+                color=ft.Colors.GREY_500, 
+                weight=ft.FontWeight.W_500,
+                italic=True
+            )
+        ],
+        alignment=ft.MainAxisAlignment.END,
+        spacing=4
+    )
+
     page.add(
         ft.Column(
             controls=[
                 ft.Container(content=tabs_control, expand=True),
                 ft.Divider(height=1),
-                container_status
+                container_status,
+                rodape
             ],
             expand=True,
-            spacing=5
+            spacing=3
         )
     )
 
