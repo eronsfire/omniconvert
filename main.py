@@ -5,7 +5,7 @@ import urllib.request
 import yt_dlp
 import flet as ft
 
-VERSION_ATUAL = "0.9"
+VERSION_ATUAL = "0.9.1"
 REPO_GITHUB = "eronsfire/omniconvert"
 
 def instalar_apk(caminho_apk):
