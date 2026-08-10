@@ -34,6 +34,9 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Accept Android Licenses
+        run: y | flutter doctor --android-licenses || true
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -42,7 +45,7 @@ jobs:
       - name: Build APK
         run: |
           flet build apk \
-            --android-permissions REQUEST_INSTALL_PACKAGES WRITE_EXTERNAL_STORAGE READ_EXTERNAL_STORAGE INTERNET
+            --android-permissions android.permission.REQUEST_INSTALL_PACKAGES android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE android.permission.INTERNET
           
           mv build/apk/*.apk "build/apk/Conversor_Eronsfire.apk"
 
