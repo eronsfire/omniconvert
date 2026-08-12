@@ -2,6 +2,7 @@ import threading
 import flet as ft
 from downloader import VideoDownloader
 from updater import AppUpdater
+from youtube_auth import YouTubeAuthenticator
 from config import APP_VERSION
 
 def main(page: ft.Page):
@@ -65,12 +66,67 @@ def main(page: ft.Page):
     # Instanciando os serviços
     downloader_service = VideoDownloader(mostrar_status, progress_hook)
     updater_service = AppUpdater(mostrar_status)
+    auth_service = YouTubeAuthenticator(mostrar_status)
 
     # --- BOTÃO DE ATUALIZAÇÃO ---
     btn_atualizar = ft.IconButton(
         icon=ft.Icons.SYSTEM_UPDATE,
         tooltip="Buscar Atualização"
     )
+
+    # --- STATUS DE AUTENTICAÇÃO ---
+    status_auth = ft.Icon(
+        ft.Icons.LOCK_OPEN,
+        size=20,
+        color=ft.Colors.ORANGE_400,
+        tooltip="Não autenticado no YouTube"
+    )
+    
+    def atualizar_status_auth():
+        """Atualiza o ícone de status de autenticação."""
+        if auth_service.verificar_cookies_validos():
+            status_auth.name = ft.Icons.LOCK_CLOCK
+            status_auth.color = ft.Colors.GREEN_400
+            status_auth.tooltip = "Autenticado no YouTube ✓"
+        else:
+            status_auth.name = ft.Icons.LOCK_OPEN
+            status_auth.color = ft.Colors.ORANGE_400
+            status_auth.tooltip = "Não autenticado no YouTube"
+        try:
+            status_auth.update()
+        except:
+            pass
+
+    # --- BOTÃO DE LOGIN ---
+    btn_login = ft.IconButton(
+        icon=ft.Icons.LOGIN,
+        tooltip="Login YouTube"
+    )
+    
+    def fazer_login_youtube(e=None):
+        """Inicia o processo de login."""
+        btn_login.disabled = True
+        mostrar_status("Abrindo navegador para login...")
+        page.update()
+        
+        def tarefa():
+            try:
+                # Tentar Chrome primeiro (mais estável)
+                resultado = auth_service.fazer_login_youtube(usar_firefox=False)
+                if resultado:
+                    mostrar_status("Login realizado com sucesso! Seus cookies estão salvos.")
+                    atualizar_status_auth()
+                else:
+                    mostrar_status("Falha no login. Verifique se você fez login no navegador.", e_erro=True)
+            except Exception as err:
+                mostrar_status(f"Erro ao fazer login: {err}", e_erro=True)
+            finally:
+                btn_login.disabled = False
+                page.update()
+        
+        threading.Thread(target=tarefa, daemon=True).start()
+
+    btn_login.on_click = fazer_login_youtube
 
     # --- EVENTOS ---
     def verificar_atualizacao(e=None):
@@ -102,18 +158,22 @@ def main(page: ft.Page):
 
     def mapear_formato(qualidade: str, eh_social: bool = False) -> str:
         if qualidade == "Apenas Áudio (MP3)":
-            return "mp3"
+            return "audio"
 
+        # Formatos mais precisos para cada qualidade
         formatos = {
-            "Melhor Qualidade (Máxima)": "bestvideo+bestaudio/best",
-            "2160p (4K)": "bestvideo[height<=2160]+bestaudio/best[height<=2160]/best",
-            "1440p (2K)": "bestvideo[height<=1440]+bestaudio/best[height<=1440]/best",
-            "1080p (Full HD)": "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
-            "720p (HD)": "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
-            "480p (SD)": "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
-            "360p (Baixa)": "bestvideo[height<=360]+bestaudio/best[height<=360]/best",
+            "Melhor Qualidade (Máxima)": "best[ext=mp4]/best",
+            "8K (7680p)": "best[height<=7680][ext=mp4]/best[height<=7680]/best",
+            "4K (2160p)": "best[height<=2160][ext=mp4]/best[height<=2160]/best",
+            "2K (1440p)": "best[height<=1440][ext=mp4]/best[height<=1440]/best",
+            "Full HD (1080p)": "best[height<=1080][ext=mp4]/best[height<=1080]/best",
+            "HD (720p)": "best[height<=720][ext=mp4]/best[height<=720]/best",
+            "Standard (480p)": "best[height<=480][ext=mp4]/best[height<=480]/best",
+            "Low (360p)": "best[height<=360][ext=mp4]/best[height<=360]/best",
+            "Mínima (240p)": "best[height<=240][ext=mp4]/best[height<=240]/best",
+            "Apenas Áudio (Melhor Qualidade)": "bestaudio/ba",
         }
-        return formatos.get(qualidade, "bestvideo+bestaudio/best")
+        return formatos.get(qualidade, "best[ext=mp4]/best")
 
     def disparar_download(url: str, qualidade: str, eh_social: bool = False):
         if not url:
@@ -143,13 +203,16 @@ def main(page: ft.Page):
         label="Qualidade / Formato",
         options=[
             ft.dropdown.Option("Melhor Qualidade (Máxima)"),
-            ft.dropdown.Option("2160p (4K)"),
-            ft.dropdown.Option("1440p (2K)"),
-            ft.dropdown.Option("1080p (Full HD)"),
-            ft.dropdown.Option("720p (HD)"),
-            ft.dropdown.Option("480p (SD)"),
-            ft.dropdown.Option("360p (Baixa)"),
+            ft.dropdown.Option("8K (7680p)"),
+            ft.dropdown.Option("4K (2160p)"),
+            ft.dropdown.Option("2K (1440p)"),
+            ft.dropdown.Option("Full HD (1080p)"),
+            ft.dropdown.Option("HD (720p)"),
+            ft.dropdown.Option("Standard (480p)"),
+            ft.dropdown.Option("Low (360p)"),
+            ft.dropdown.Option("Mínima (240p)"),
             ft.dropdown.Option("Apenas Áudio (MP3)"),
+            ft.dropdown.Option("Apenas Áudio (Melhor Qualidade)"),
         ],
         value="Melhor Qualidade (Máxima)"
     )
@@ -168,13 +231,16 @@ def main(page: ft.Page):
         label="Qualidade / Formato",
         options=[
             ft.dropdown.Option("Melhor Qualidade (Máxima)"),
-            ft.dropdown.Option("2160p (4K)"),
-            ft.dropdown.Option("1440p (2K)"),
-            ft.dropdown.Option("1080p (Full HD)"),
-            ft.dropdown.Option("720p (HD)"),
-            ft.dropdown.Option("480p (SD)"),
-            ft.dropdown.Option("360p (Baixa)"),
+            ft.dropdown.Option("8K (7680p)"),
+            ft.dropdown.Option("4K (2160p)"),
+            ft.dropdown.Option("2K (1440p)"),
+            ft.dropdown.Option("Full HD (1080p)"),
+            ft.dropdown.Option("HD (720p)"),
+            ft.dropdown.Option("Standard (480p)"),
+            ft.dropdown.Option("Low (360p)"),
+            ft.dropdown.Option("Mínima (240p)"),
             ft.dropdown.Option("Apenas Áudio (MP3)"),
+            ft.dropdown.Option("Apenas Áudio (Melhor Qualidade)"),
         ],
         value="Melhor Qualidade (Máxima)"
     )
@@ -200,7 +266,11 @@ def main(page: ft.Page):
                         ft.Tab(label="YouTube", icon=ft.Icons.VIDEO_LIBRARY),
                         ft.Tab(label="Insta / TikTok", icon=ft.Icons.CAMERA_ALT),
                     ]),
-                    btn_atualizar,
+                    ft.Row([
+                        status_auth,
+                        btn_login,
+                        btn_atualizar,
+                    ], spacing=5)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.TabBarView(
                     expand=True,
@@ -238,6 +308,9 @@ def main(page: ft.Page):
             spacing=3
         )
     )
+    
+    # Atualizar status de autenticação ao iniciar
+    atualizar_status_auth()
 
 if __name__ == "__main__":
     ft.run(main)

@@ -2,3 +2,5 @@ flet
 yt-dlp
 requests
 certifi
+selenium>=4.0.0
+webdriver-manager>=3.8.0

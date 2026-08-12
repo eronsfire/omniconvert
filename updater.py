@@ -1,15 +1,18 @@
 import os
 import glob
+import time
 import requests
 import subprocess
+import threading
 from config import get_download_path, APP_VERSION, GITHUB_REPO
 
 class AppUpdater:
     def __init__(self, callback_status):
         self.mostrar_status = callback_status
+        self.aguardando_instalacao = False
 
     def checar_e_atualizar(self, callback_progresso_apk):
-        """Automação completa: Limpa velhos, baixa novo e abre o instalador na tela."""
+        """Automação completa: Limpa velhos, baixa novo, abre instalador e apaga após instalar."""
         try:
             url_api = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
             res = requests.get(url_api, timeout=8)
@@ -33,8 +36,9 @@ class AppUpdater:
                         for apk_antigo in glob.glob(os.path.join(pasta_dest, "Conversor_Eronsfire_*.apk")):
                             try:
                                 os.remove(apk_antigo)
-                            except Exception:
-                                pass
+                                print(f"[DEBUG] APK antigo removido: {apk_antigo}")
+                            except Exception as e:
+                                print(f"[DEBUG] Não conseguiu remover APK antigo: {e}")
 
                         caminho_apk = os.path.join(pasta_dest, f"Conversor_Eronsfire_v{tag_versao}.apk")
 
@@ -51,9 +55,17 @@ class AppUpdater:
                                         callback_progresso_apk(baixado, total_size)
 
                         self.mostrar_status("Download pronto! Abrindo instalador...")
+                        print(f"[DEBUG] APK salvo em: {caminho_apk}")
                         
-                        # 3. ETAPA AUTOMÁTICA: Chama a tela do sistema para Atualizar/Sobrescrever
+                        # 3. ETAPA AUTOMÁTICA: Chama o instalador do sistema
                         self._chamar_instalador_sistema(caminho_apk)
+                        
+                        # 4. ETAPA AUTOMÁTICA: Inicia limpeza automática em background
+                        threading.Thread(
+                            target=self._limpar_apk_apos_instalacao,
+                            args=(caminho_apk,),
+                            daemon=True
+                        ).start()
                     else:
                         self.mostrar_status(f"Nova versão v{tag_versao} sem APK anexo.", True)
                 else:
@@ -66,13 +78,59 @@ class AppUpdater:
     def _chamar_instalador_sistema(self, caminho_apk: str):
         """Abre a janela nativa do Android que pergunta: 'Deseja atualizar este aplicativo?'"""
         try:
-            cmd = [
-                "am", "start",
-                "-a", "android.intent.action.VIEW",
-                "-d", f"file://{caminho_apk}",
-                "-t", "application/vnd.android.package-archive",
-                "-f", "0x10000000"
-            ]
-            subprocess.run(cmd, check=True)
+            eh_android = 'ANDROID_STORAGE' in os.environ or 'ANDROID_ARGUMENT' in os.environ
+            
+            if eh_android:
+                # Android: Usa am start
+                cmd = [
+                    "am", "start",
+                    "-a", "android.intent.action.VIEW",
+                    "-d", f"file://{caminho_apk}",
+                    "-t", "application/vnd.android.package-archive",
+                    "-f", "0x10000000"
+                ]
+                subprocess.run(cmd, check=True)
+                print("[INFO] Instalador aberto no Android")
+            else:
+                # PC Windows: Executa o APK com aplicativo padrão
+                os.startfile(caminho_apk)
+                print("[INFO] Instalador aberto no PC")
+                
         except Exception as e:
             self.mostrar_status(f"Falha ao abrir instalador: {e}", True)
+            print(f"[ERROR] Stack trace: {e}")
+
+    def _limpar_apk_apos_instalacao(self, caminho_apk: str):
+        """
+        Monitora a instalação e deleta o APK após o processo terminar.
+        Aguarda 30 segundos após o download começar (tempo estimado de instalação).
+        """
+        try:
+            print(f"[DEBUG] Iniciando monitoramento de limpeza para: {caminho_apk}")
+            
+            # Aguarda 30 segundos (tempo para o usuário confirmar/instalar)
+            time.sleep(30)
+            
+            # Tenta deletar o arquivo
+            if os.path.exists(caminho_apk):
+                try:
+                    os.remove(caminho_apk)
+                    self.mostrar_status(f"✓ APK temporário removido automaticamente")
+                    print(f"[SUCCESS] APK apagado: {caminho_apk}")
+                except PermissionError:
+                    # Arquivo ainda está em uso, tenta novamente
+                    print(f"[DEBUG] APK em uso, tentando novamente em 10s...")
+                    time.sleep(10)
+                    try:
+                        os.remove(caminho_apk)
+                        self.mostrar_status(f"✓ APK removido após instalação")
+                        print(f"[SUCCESS] APK apagado na segunda tentativa: {caminho_apk}")
+                    except Exception as e:
+                        print(f"[WARN] Não foi possível remover APK: {e}")
+                except Exception as e:
+                    print(f"[ERROR] Erro ao remover APK: {e}")
+            else:
+                print(f"[DEBUG] APK já foi deletado ou movido: {caminho_apk}")
+                
+        except Exception as e:
+            print(f"[ERROR] Erro no processo de limpeza: {e}")
