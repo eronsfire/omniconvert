@@ -58,18 +58,21 @@ jobs:
 
       - name: Build APK
         run: |
+          cd build/flutter
+          flutter pub get
           flet build apk \
+            -y \
             --arch arm64-v8a \
             --android-signing-key-store "${{ github.workspace }}/upload-keystore.jks" \
             --android-signing-key-store-password "${{ secrets.KEYSTORE_PASSWORD }}" \
             --android-signing-key-alias "${{ secrets.KEY_ALIAS }}" \
             --android-signing-key-password "${{ secrets.KEY_PASSWORD }}"
           
-          mv build/apk/*.apk "build/apk/Conversor_Eronsfire.apk"
+          mv build/app/outputs/flutter-apk/app-release.apk "${{ github.workspace }}/Conversor_Eronsfire_v${{ github.ref_name }}.apk"
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: build/apk/Conversor_Eronsfire.apk
+          files: Conversor_Eronsfire_v${{ github.ref_name }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
