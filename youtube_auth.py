@@ -1,7 +1,9 @@
 import os
 import json
 import time
+import webbrowser
 from pathlib import Path
+from datetime import datetime, timedelta
 
 try:
     from selenium import webdriver
@@ -44,6 +46,39 @@ class YouTubeAuthenticator:
             os.path.dirname(os.path.abspath(__file__)),
             "youtube_cookies.txt"
         )
+        self.login_status_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "youtube_login_status.json"
+        )
+
+    def marcar_login_confirmado(self) -> bool:
+        """Marca que o usuário confirmou o login manual no navegador."""
+        try:
+            payload = {
+                "confirmado": True,
+                "data": datetime.utcnow().isoformat(timespec="seconds") + "Z"
+            }
+            with open(self.login_status_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f)
+            return True
+        except Exception as exc:
+            print(f"[ERROR] Falha ao gravar confirmação de login: {exc}")
+            return False
+
+    def login_confirmado_recentemente(self) -> bool:
+        """Retorna True se o login foi confirmado dentro de 7 dias."""
+        if not os.path.exists(self.login_status_path):
+            return False
+        try:
+            with open(self.login_status_path, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+            data_str = dados.get("data")
+            if not data_str:
+                return False
+            data = datetime.fromisoformat(data_str.replace("Z", "+00:00"))
+            return datetime.now(data.tzinfo) - data < timedelta(days=7)
+        except Exception:
+            return False
 
     def atualizar_status(self, mensagem: str, eh_erro: bool = False):
         """Atualiza o status na UI ou imprime no console."""
@@ -59,16 +94,17 @@ class YouTubeAuthenticator:
                 pass
 
     def verificar_cookies_validos(self) -> bool:
-        """Verifica se existem cookies salvos e válidos."""
-        if not os.path.exists(self.cookies_path):
-            return False
-        
-        try:
-            with open(self.cookies_path, 'r') as f:
-                conteudo = f.read().strip()
-                return len(conteudo) > 0
-        except:
-            return False
+        """Verifica se existem cookies salvos ou confirmação recente de login manual."""
+        if os.path.exists(self.cookies_path):
+            try:
+                with open(self.cookies_path, 'r', encoding='utf-8') as f:
+                    conteudo = f.read().strip()
+                    if len(conteudo) > 0:
+                        return True
+            except Exception:
+                pass
+
+        return self.login_confirmado_recentemente()
 
     def fazer_login_youtube(self, usar_firefox: bool = False) -> bool:
         """
@@ -82,11 +118,19 @@ class YouTubeAuthenticator:
             True se login foi bem-sucedido, False caso contrário.
         """
         if _esta_no_android():
-            self.atualizar_status(
-                "O login do YouTube em navegador não está disponível na APK Android.",
-                eh_erro=True,
-            )
-            return False
+            try:
+                webbrowser.open("https://www.youtube.com")
+                self.atualizar_status(
+                    "Navegador aberto. Faça login no YouTube e depois toque em Confirmar login.",
+                    eh_erro=False,
+                )
+                return True
+            except Exception as exc:
+                self.atualizar_status(
+                    f"Não foi possível abrir o navegador do sistema: {exc}",
+                    eh_erro=True,
+                )
+                return False
 
         if webdriver is None or GeckoDriverManager is None or ChromeDriverManager is None:
             self.atualizar_status(

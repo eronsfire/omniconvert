@@ -102,22 +102,27 @@ def main(page: ft.Page):
         icon=ft.Icons.LOGIN,
         tooltip="Login YouTube"
     )
+
+    btn_confirmar_login = ft.IconButton(
+        icon=ft.Icons.CHECK_CIRCLE_OUTLINE,
+        tooltip="Confirmar login concluído"
+    )
     
     def fazer_login_youtube(e=None):
         """Inicia o processo de login."""
         btn_login.disabled = True
+        btn_confirmar_login.disabled = False
         mostrar_status("Abrindo navegador para login...")
         page.update()
         
         def tarefa():
             try:
-                # Tentar Chrome primeiro (mais estável)
                 resultado = auth_service.fazer_login_youtube(usar_firefox=False)
                 if resultado:
-                    mostrar_status("Login realizado com sucesso! Seus cookies estão salvos.")
+                    mostrar_status("Navegador aberto. Faça login e toque em Confirmar login quando terminar.")
                     atualizar_status_auth()
                 else:
-                    mostrar_status("Falha no login. Verifique se você fez login no navegador.", e_erro=True)
+                    mostrar_status("Não foi possível abrir o navegador. Tente novamente.", e_erro=True)
             except Exception as err:
                 mostrar_status(f"Erro ao fazer login: {err}", e_erro=True)
             finally:
@@ -126,7 +131,16 @@ def main(page: ft.Page):
         
         threading.Thread(target=tarefa, daemon=True).start()
 
+    def confirmar_login_youtube(e=None):
+        """Marca o login manual como concluído e atualiza o estado do app."""
+        if auth_service.marcar_login_confirmado():
+            mostrar_status("Login do YouTube confirmado. Você pode continuar.")
+            atualizar_status_auth()
+        else:
+            mostrar_status("Não foi possível confirmar o login do YouTube.", e_erro=True)
+
     btn_login.on_click = fazer_login_youtube
+    btn_confirmar_login.on_click = confirmar_login_youtube
 
     # --- EVENTOS ---
     def verificar_atualizacao(e=None):
