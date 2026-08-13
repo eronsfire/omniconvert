@@ -25,16 +25,33 @@ except Exception:
     FirefoxService = ChromeService = None
     GeckoDriverManager = ChromeDriverManager = None
 
+# Try to import Flutter/Flet plugin interface for Android method channels
+try:
+    import flet
+    FLET_AVAILABLE = True
+except Exception:
+    FLET_AVAILABLE = False
+
 
 def _esta_no_android() -> bool:
-    """Detecta ambiente Android/serious_python para evitar uso de navegador em APK."""
+    """
+    Detecta ambiente Android/serious_python para evitar uso de navegador em APK.
+    Mais específico: verifica apenas indicadores reais de Android, não ambiente simulado.
+    """
     return (
         os.getenv("ANDROID_ROOT") is not None
-        or os.getenv("ANDROID_DATA") is not None
-        or os.getenv("ANDROID_STORAGE") is not None
         or os.path.exists("/system/build.prop")
-        or os.path.exists("/sdcard")
+        or (os.path.exists("/sdcard") and os.getenv("ANDROID_DATA") is not None)
     )
+
+
+def _flet_runtime_disponivel() -> bool:
+    """Verifica se flet_runtime está disponível (indica APK compilado, não dev mode)."""
+    try:
+        import flet_runtime
+        return True
+    except ImportError:
+        return False
 
 
 class YouTubeAuthenticator:
@@ -50,6 +67,7 @@ class YouTubeAuthenticator:
             os.path.dirname(os.path.abspath(__file__)),
             "youtube_login_status.json"
         )
+        self._android_cookie_file = None
 
     def marcar_login_confirmado(self) -> bool:
         """Marca que o usuário confirmou o login manual no navegador."""
@@ -106,32 +124,122 @@ class YouTubeAuthenticator:
 
         return self.login_confirmado_recentemente()
 
+    def _abrir_login_android_nativo(self) -> bool:
+        """
+        Abre a Activity nativa Android para login com Chrome Custom Tabs.
+        Retorna True se conseguiu iniciar.
+        
+        IMPORTANTE: Só funciona em APK compilado, não em development mode.
+        """
+        try:
+            # Import é tardio para evitar erro em desktop
+            import flet_runtime
+            
+            self.atualizar_status("Abrindo YouTube no navegador...")
+            
+            # Invoca o método channel do MainActivity
+            result = flet_runtime.invoke_method("openYoutubeLogin")
+            
+            if result:
+                self.atualizar_status(
+                    "✓ Navegador aberto. Faça login e permita acesso.",
+                    eh_erro=False,
+                )
+                return True
+            else:
+                self.atualizar_status(
+                    "Falha ao invocar login nativo.",
+                    eh_erro=True
+                )
+                return False
+                
+        except ImportError as e:
+            # flet_runtime não disponível (development mode, não APK)
+            print(f"[DEBUG] flet_runtime not available: {e}")
+            self.atualizar_status(
+                "Modo de desenvolvimento: use Selenium no desktop.",
+                eh_erro=True
+            )
+            return False
+        except Exception as exc:
+            print(f"[DEBUG] Native Android login error: {exc}")
+            self.atualizar_status(
+                f"Erro ao abrir login nativo: {exc}",
+                eh_erro=True
+            )
+            return False
+
+    def _aguardar_cookies_android(self, timeout_segundos: int = 120) -> bool:
+        """
+        Aguarda que o arquivo de cookies seja criado pela Activity nativa.
+        Verifica a cada 2 segundos.
+        
+        Args:
+            timeout_segundos: Tempo máximo de espera em segundos
+        
+        Returns:
+            True se cookies foram capturados, False se expirou o timeout
+        """
+        inicio = time.time()
+        
+        while time.time() - inicio < timeout_segundos:
+            try:
+                if os.path.exists(self.cookies_path):
+                    with open(self.cookies_path, 'r', encoding='utf-8') as f:
+                        conteudo = f.read().strip()
+                        if len(conteudo) > 100:  # Arquivo tem conteúdo real
+                            self.atualizar_status("✓ Cookies do YouTube capturados com sucesso!")
+                            return True
+            except Exception:
+                pass
+            
+            time.sleep(2)
+        
+        self.atualizar_status(
+            "Timeout aguardando cookies. Tente novamente.",
+            eh_erro=True
+        )
+        return False
+
     def fazer_login_youtube(self, usar_firefox: bool = False) -> bool:
         """
         Abre navegador e permite login manual no YouTube.
         Captura cookies automaticamente após o login.
         
+        Estratégia:
+        1. Se é APK Android compilado → tenta login nativo (Chrome Custom Tabs)
+        2. Se é desenvolvimento/desktop (python main.py) → usa Selenium
+        3. Se é APK Android mas nativo falha → avisa ao usuário
+        
         Args:
-            usar_firefox: Se True, usa Firefox. Se False, usa Chrome.
+            usar_firefox: Se True, usa Firefox. Se False, usa Chrome (apenas desktop).
         
         Returns:
             True se login foi bem-sucedido, False caso contrário.
         """
-        if _esta_no_android():
-            try:
-                webbrowser.open("https://www.youtube.com")
+        # Primeiro: Verificar se é APK Android compilado (não desenvolvimento)
+        if _esta_no_android() and _flet_runtime_disponivel():
+            self.atualizar_status("Iniciando login nativo do YouTube...")
+            
+            # Tenta login nativo do Android
+            if self._abrir_login_android_nativo():
+                # Aguarda cookies serem salvos
+                if self._aguardar_cookies_android(timeout_segundos=120):
+                    return True
+                else:
+                    self.atualizar_status(
+                        "Timeout aguardando confirmação de login.",
+                        eh_erro=True
+                    )
+                    return False
+            else:
                 self.atualizar_status(
-                    "Navegador aberto. Faça login no YouTube e depois toque em Confirmar login.",
-                    eh_erro=False,
-                )
-                return True
-            except Exception as exc:
-                self.atualizar_status(
-                    f"Não foi possível abrir o navegador do sistema: {exc}",
-                    eh_erro=True,
+                    "Falha ao abrir navegador nativo.",
+                    eh_erro=True
                 )
                 return False
 
+        # Segundo: Se é desktop (desenvolvimento com python main.py) ou sem flet_runtime
         if webdriver is None or GeckoDriverManager is None or ChromeDriverManager is None:
             self.atualizar_status(
                 "Dependências do navegador não estão disponíveis nesta build.",
