@@ -59,7 +59,6 @@ jobs:
       - name: Build APK
         run: |
           flet build apk \
-            -y \
             --arch arm64-v8a \
             --android-signing-key-store "${{ github.workspace }}/upload-keystore.jks" \
             --android-signing-key-store-password "${{ secrets.KEYSTORE_PASSWORD }}" \
