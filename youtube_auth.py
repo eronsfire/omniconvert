@@ -2,16 +2,37 @@ import os
 import json
 import time
 from pathlib import Path
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.webdriver.firefox.options import Options as FirefoxOptions
-from selenium.webdriver.firefox.service import Service as FirefoxService
-from selenium.webdriver.chrome.service import Service as ChromeService
-from webdriver_manager.firefox import GeckoDriverManager
-from webdriver_manager.chrome import ChromeDriverManager
+
+try:
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.chrome.options import Options as ChromeOptions
+    from selenium.webdriver.firefox.options import Options as FirefoxOptions
+    from selenium.webdriver.firefox.service import Service as FirefoxService
+    from selenium.webdriver.chrome.service import Service as ChromeService
+    from webdriver_manager.firefox import GeckoDriverManager
+    from webdriver_manager.chrome import ChromeDriverManager
+except Exception:
+    webdriver = None
+    By = None
+    WebDriverWait = None
+    EC = None
+    ChromeOptions = FirefoxOptions = None
+    FirefoxService = ChromeService = None
+    GeckoDriverManager = ChromeDriverManager = None
+
+
+def _esta_no_android() -> bool:
+    """Detecta ambiente Android/serious_python para evitar uso de navegador em APK."""
+    return (
+        os.getenv("ANDROID_ROOT") is not None
+        or os.getenv("ANDROID_DATA") is not None
+        or os.getenv("ANDROID_STORAGE") is not None
+        or os.path.exists("/system/build.prop")
+        or os.path.exists("/sdcard")
+    )
 
 
 class YouTubeAuthenticator:
@@ -60,6 +81,20 @@ class YouTubeAuthenticator:
         Returns:
             True se login foi bem-sucedido, False caso contrário.
         """
+        if _esta_no_android():
+            self.atualizar_status(
+                "O login do YouTube em navegador não está disponível na APK Android.",
+                eh_erro=True,
+            )
+            return False
+
+        if webdriver is None or GeckoDriverManager is None or ChromeDriverManager is None:
+            self.atualizar_status(
+                "Dependências do navegador não estão disponíveis nesta build.",
+                eh_erro=True,
+            )
+            return False
+
         driver = None
         try:
             self.atualizar_status("Iniciando navegador para login...")
