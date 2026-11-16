@@ -1,169 +1,58 @@
-# 🔐 Guia de Autenticação YouTube - Downloader Eronsfire
+# Login no YouTube (anti "suspeita de bot")
 
-## ✨ O que foi implementado
+O YouTube bloqueia downloads com a mensagem **"Sign in to confirm you're not a bot"**.
+Para resolver, o app passa a usar cookies de uma sessão logada no YouTube.
 
-Seu app agora possui **autenticação automática do YouTube com Selenium**, que permite fazer login uma única vez e usar cookies para downloads ilimitados, contornando bloqueios de bot.
+## Como funciona
 
----
+O arquivo `youtube_cookies.txt` (formato Netscape, o mesmo do yt-dlp) fica salvo
+num diretório **gravável** do app:
 
-## 🚀 Como usar
+- Android/Desktop com build Flet: `FLET_APP_STORAGE_DATA` (definido pelo Flet)
+- PC sem essa variável: `~/.omniconvert/youtube_cookies.txt`
+- Último recurso: pasta temporária do sistema
 
-### **1️⃣ Fazer Login (primeira vez)**
+Cookies salvos ao lado do código-fonte por versões antigas são migrados
+automaticamente na primeira execução.
 
-1. Abra o app
-2. Clique no botão **🔓 Login** (ícone de cadeado no topo da interface)
-3. Um navegador Firefox/Chrome se abrirá automaticamente
-4. **Faça login no YouTube normalmente** (email e senha)
-5. Após o login, o app capturará automaticamente seus cookies
-6. O ícone de cadeado mudará para 🔒 (verde) indicando sucesso
+O ícone de cadeado no topo mostra o estado real (verde = cookies de login válidos).
 
-**⏱️ Você tem até 5 minutos para fazer login no navegador**
+## Opção 1 — Desktop (PC): login automático
 
----
+1. Toque no botão de login (ícone de seta) no topo do app.
+2. O Chrome abre (Firefox se configurado). Faça login no YouTube normalmente.
+3. O app detecta o login automaticamente (verifica os cookies a cada 2 segundos,
+   até 5 minutos) e salva o `youtube_cookies.txt`.
+4. Pronto — não é preciso fazer mais nada.
 
-## 📁 Como funciona
+Usa o selenium-manager embutido no Selenium 4; não é preciso instalar o driver manualmente.
 
-### **Antes do Login:**
-```
-❌ YouTube bloqueia como suspeita de bot
-❌ Mensagem: "Sign in to confirm you're not a bot"
-```
+## Opção 2 — Android (ou qualquer aparelho): importar cookies.txt
 
-### **Depois do Login:**
-```
-✅ Cookies salvos em: youtube_cookies.txt
-✅ Autenticado no YouTube
-✅ Downloads funcionam normalmente
-✅ Bloqueia de bot contornado
-```
+Não existe API pública para ler os cookies do Chrome no Android, então o caminho
+é exportar o arquivo e importar no app:
 
----
+1. No Chrome ou Firefox do celular, instale a extensão **"Get cookies.txt LOCALLY"**.
+2. Abra o **YouTube já logado** e toque em **Export** na extensão → salva/compartilha o `cookies.txt`.
+3. No app, toque no botão de **upload** (ícone ao lado do login) e selecione o `cookies.txt`.
+4. O app valida o arquivo (precisa conter cookies de login do YouTube/Google,
+   como `SID`, `__Secure-1PSID` ou `LOGIN_INFO`) e salva no armazenamento do app.
+5. O bloqueio de suspeita de bot some.
 
-## 🔄 Downloads com Autenticação
+Se o arquivo for aceito mas não tiver cookies de login, o app avisa e **não**
+sobrescreve cookies válidos já importados.
 
-Após fazer login:
+## Opção 3 — PC: Firefox direto
 
-1. Cole a URL do vídeo YouTube
-2. Escolha a qualidade desejada
-3. Clique em **Baixar YouTube**
-4. O app automaticamente usa seus cookies para autenticar
+O yt-dlp também consegue ler cookies do Firefox sozinho. Se preferir não usar
+nem Selenium nem exportar arquivo, exporte manualmente com a extensão
+"Get cookies.txt LOCALLY" e use a Opção 2 — funciona igual no PC.
 
-**Sem limite de downloads, sem suspeita de bot!**
+## Notas
 
----
-
-## ⚙️ Detalhes Técnicos
-
-### **Como os cookies são salvos**
-
-- **Formato:** Netscape (compatível com yt-dlp)
-- **Localização:** `youtube_cookies.txt` na pasta do app
-- **Segurança:** Permissões restritivas (0o600)
-- **Persistência:** Salvos entre execuções
-
-### **Fluxo de Login**
-
-```
-1. Clica em "Login" 
-   ↓
-2. Selenium abre Firefox/Chrome
-   ↓
-3. YouTube detecta login humano (não é bot)
-   ↓
-4. App captura cookies após detecção de login
-   ↓
-5. Cookies salvos em youtube_cookies.txt
-   ↓
-6. yt-dlp usa cookies em todos os downloads
-```
-
----
-
-## 🛠️ Troubleshooting
-
-### **Q: O navegador não abriu**
-**A:** Verifique se tem Firefox ou Chrome instalados. Se o Selenium não conseguir encontrar, instale:
-- Firefox: https://www.mozilla.org/firefox/
-- Chrome: https://www.google.com/chrome/
-
-### **Q: Timeout no login (5 minutos passaram)**
-**A:** Clique em "Login" novamente e faça o login mais rápido. A detecção do login é automática.
-
-### **Q: Continuação com erro de bot após login**
-**A:** 
-1. Clique em "Login" novamente
-2. Faça logout no YouTube primeiro (se necessário)
-3. Faça novo login
-4. Os cookies antigos serão sobrescritos
-
-### **Q: Como remover os cookies?**
-**A:** Apague manualmente o arquivo `youtube_cookies.txt` na pasta do app.
-
----
-
-## 🔐 Segurança
-
-✅ Seus dados de login **NÃO são salvos** no app
-✅ Apenas os **cookies da sessão** são armazenados
-✅ Cookies salvos localmente com permissões restritas
-✅ YouTube reconhece como login legítimo (não bot)
-
----
-
-## 📊 Status de Autenticação
-
-Observe o ícone no topo da interface:
-
-| Ícone | Status | Significado |
-|-------|--------|------------|
-| 🔓 (laranja) | Não autenticado | Faça login para usar |
-| 🔒 (verde) | Autenticado | Pronto para baixar |
-
----
-
-## 🎯 Para Múltiplos Celulares
-
-Se quer distribuir para vários usuários:
-
-1. **Cada usuário faz login uma vez** no seu dispositivo
-2. App captura e salva cookies **localmente**
-3. Todos os downloads futuros usam esses cookies
-4. **Cada dispositivo tem seus próprios cookies**
-
-Não há limite de cookies ou sessões simultâneas!
-
----
-
-## 📝 Changelog
-
-**v0.9.9.2+**
-- ✨ Adicionado suporte a autenticação Selenium
-- ✨ Captura automática de cookies
-- ✨ Indicador visual de status de autenticação
-- ✨ Headers realistas para evitar bloqueios
-- ✨ Retry automático em falhas
-- 🔧 Melhorado tratamento de erros de bot
-
----
-
-## 💡 Dicas
-
-1. **Não compartilhe cookies:** Cada usuário deve fazer seu próprio login
-2. **Login único:** Uma vez feito login, use indefinidamente
-3. **Velocidade:** Com cookies válidos, downloads são mais rápidos
-4. **Privacidade:** Você pode fazer logout da conta YouTube no navegador após o app capturar cookies
-
----
-
-## 🆘 Suporte
-
-Se encontrar problemas:
-
-1. Verifique se o Firefox/Chrome está instalado
-2. Tente fazer login manualmente no YouTube primeiro (navegador normal)
-3. Limpe os cookies e tente novamente
-4. Reinicie o app
-
----
-
-**Desenvolvido com ❤️ por Eronsfire Team**
+- Cookies expiram (sessão do YouTube). Se voltar o bloqueio, exporte/importe de novo.
+- Seus cookies ficam só no aparelho e são usados apenas pelo yt-dlp.
+- O seletor de importação aceita apenas `.txt` e lê o conteúdo na memória
+  (funciona mesmo quando o Android não expõe o caminho do arquivo).
+- Verifique o estado a qualquer momento com `obter_info_cookies()` (nº de cookies,
+  marcadores de login e data de modificação).

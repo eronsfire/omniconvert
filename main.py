@@ -4,9 +4,14 @@ from downloader import VideoDownloader
 from updater import AppUpdater
 from youtube_auth import YouTubeAuthenticator
 from config import APP_VERSION
+from utils import mapear_formato
+
+# Lock para serializar atualizações de UI vindas das threads de trabalho
+# (o Flet não é thread-safe para `page.update()` chamado direto de threads)
+ui_lock = threading.Lock()
 
 def main(page: ft.Page):
-    page.title = f"Downloader Eronsfire v{APP_VERSION}"
+    page.title = f"Conversor Eronsfire v{APP_VERSION}"
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = {"left": 15, "top": 40, "right": 15, "bottom": 10}
 
@@ -29,7 +34,11 @@ def main(page: ft.Page):
     def mostrar_status(texto, e_erro=False):
         txt_status.value = texto
         txt_status.color = ft.Colors.RED_400 if e_erro else ft.Colors.WHITE
-        page.update()
+        with ui_lock:
+            try:
+                page.update()
+            except Exception:
+                pass
 
     def progress_hook(d):
         if d['status'] == 'downloading':
@@ -45,28 +54,39 @@ def main(page: ft.Page):
             progresso_bar.value = porcentagem
             progresso_texto.value = f"{porcentagem*100:.1f}% de {mb_total:.1f} MB ({mb_speed:.2f} MB/s)"
             
-            try:
-                progresso_bar.update()
-                progresso_texto.update()
-            except Exception:
-                page.update()
+            with ui_lock:
+                try:
+                    progresso_bar.update()
+                    progresso_texto.update()
+                except Exception:
+                    try:
+                        page.update()
+                    except Exception:
+                        pass
 
         elif d['status'] == 'finished':
             progresso_bar.value = 1.0
             progresso_texto.value = "Download concluído! Processando arquivo..."
             txt_status.value = "Download finalizado! Salvo na pasta Downloads."
             txt_status.color = ft.Colors.GREEN_400
-            try:
-                progresso_bar.update()
-                progresso_texto.update()
-                txt_status.update()
-            except Exception:
-                page.update()
+            with ui_lock:
+                try:
+                    progresso_bar.update()
+                    progresso_texto.update()
+                    txt_status.update()
+                except Exception:
+                    try:
+                        page.update()
+                    except Exception:
+                        pass
 
     # Instanciando os serviços
     downloader_service = VideoDownloader(mostrar_status, progress_hook)
     updater_service = AppUpdater(mostrar_status)
     auth_service = YouTubeAuthenticator(mostrar_status)
+
+    # Seletor de arquivos (importar cookies.txt)
+    file_picker = ft.FilePicker()
 
     # --- BOTÃO DE ATUALIZAÇÃO ---
     btn_atualizar = ft.IconButton(
@@ -83,9 +103,9 @@ def main(page: ft.Page):
     )
     
     def atualizar_status_auth():
-        """Atualiza o ícone de status de autenticação."""
+        """Atualiza o ícone de status de autenticação (com base nos cookies reais)."""
         if auth_service.verificar_cookies_validos():
-            status_auth.name = ft.Icons.LOCK_CLOCK
+            status_auth.name = ft.Icons.LOCK
             status_auth.color = ft.Colors.GREEN_400
             status_auth.tooltip = "Autenticado no YouTube ✓"
         else:
@@ -94,35 +114,25 @@ def main(page: ft.Page):
             status_auth.tooltip = "Não autenticado no YouTube"
         try:
             status_auth.update()
-        except:
+        except Exception:
             pass
 
     # --- BOTÃO DE LOGIN ---
     btn_login = ft.IconButton(
         icon=ft.Icons.LOGIN,
-        tooltip="Login YouTube"
+        tooltip="Login YouTube (abre o navegador e captura os cookies)"
     )
 
-    btn_confirmar_login = ft.IconButton(
-        icon=ft.Icons.CHECK_CIRCLE_OUTLINE,
-        tooltip="Confirmar login concluído"
-    )
-    
     def fazer_login_youtube(e=None):
         """Inicia o processo de login."""
         btn_login.disabled = True
-        btn_confirmar_login.disabled = False
-        mostrar_status("Abrindo navegador para login...")
         page.update()
         
         def tarefa():
             try:
                 resultado = auth_service.fazer_login_youtube(usar_firefox=False)
                 if resultado:
-                    mostrar_status("Navegador aberto. Faça login e toque em Confirmar login quando terminar.")
                     atualizar_status_auth()
-                else:
-                    mostrar_status("Não foi possível abrir o navegador. Tente novamente.", e_erro=True)
             except Exception as err:
                 mostrar_status(f"Erro ao fazer login: {err}", e_erro=True)
             finally:
@@ -131,16 +141,82 @@ def main(page: ft.Page):
         
         threading.Thread(target=tarefa, daemon=True).start()
 
-    def confirmar_login_youtube(e=None):
-        """Marca o login manual como concluído e atualiza o estado do app."""
-        if auth_service.marcar_login_confirmado():
-            mostrar_status("Login do YouTube confirmado. Você pode continuar.")
-            atualizar_status_auth()
-        else:
-            mostrar_status("Não foi possível confirmar o login do YouTube.", e_erro=True)
-
     btn_login.on_click = fazer_login_youtube
-    btn_confirmar_login.on_click = confirmar_login_youtube
+
+    # --- BOTÃO DE IMPORTAR COOKIES (funciona em qualquer aparelho) ---
+    btn_importar_cookies = ft.IconButton(
+        icon=ft.Icons.UPLOAD_FILE,
+        tooltip="Importar cookies.txt do YouTube (exportado do navegador)"
+    )
+
+    def importar_cookies(e=None):
+        """Abre o seletor de arquivos e importa o cookies.txt validando o conteúdo."""
+        async def _importar():
+            try:
+                mostrar_status("Selecione o cookies.txt exportado do YouTube...")
+                files = await file_picker.pick_files(
+                    dialog_title="Selecione o cookies.txt do YouTube",
+                    file_type=ft.FilePickerFileType.CUSTOM,
+                    allowed_extensions=["txt"],
+                    with_data=True,
+                )
+            except Exception as err:
+                mostrar_status(f"Erro ao abrir o seletor de arquivos: {err}", True)
+                return
+
+            if not files:
+                mostrar_status("Importação cancelada (nenhum arquivo selecionado).")
+                return
+
+            selecionado = files[0]
+            dados = selecionado.bytes
+            if dados is None and selecionado.path:
+                try:
+                    with open(selecionado.path, "rb") as f:
+                        dados = f.read()
+                except Exception as err:
+                    mostrar_status(f"Não foi possível ler o arquivo: {err}", True)
+                    return
+
+            if not dados:
+                mostrar_status("O arquivo está vazio.", True)
+                return
+
+            ok, mensagem = auth_service.importar_cookies(dados)
+            mostrar_status(mensagem, not ok)
+            atualizar_status_auth()
+
+        page.run_task(_importar)
+
+    btn_importar_cookies.on_click = importar_cookies
+
+    # --- BOTÃO DE AJUDA (passo a passo do login) ---
+    btn_ajuda_cookies = ft.IconButton(
+        icon=ft.Icons.HELP_OUTLINE,
+        tooltip="Como importar o cookies.txt?"
+    )
+
+    def mostrar_ajuda_cookies(e=None):
+        dialog = ft.AlertDialog(
+            title=ft.Text("Login do YouTube"),
+            content=ft.Column([
+                ft.Text("O YouTube bloqueia downloads com 'suspeita de robô'. Para desbloquear:", size=13),
+                ft.Text("1. No Chrome ou Firefox, instale a extensão 'Get cookies.txt LOCALLY'.", size=12),
+                ft.Text("2. Abra o YouTube já logado e exporte o arquivo cookies.txt (botão Export da extensão).", size=12),
+                ft.Text("3. Toque no botão de upload (ao lado do login) e selecione o cookies.txt.", size=12),
+                ft.Text("4. Pronto: o app passa a usar seus cookies de login.", size=12),
+                ft.Divider(height=1),
+                ft.Text("No PC, o botão de login também funciona sozinho: abre o navegador e captura os cookies automaticamente.", size=12),
+                ft.Text("Seus cookies ficam só no aparelho e são usados apenas pelo yt-dlp. Se o login expirar, exporte e importe de novo.", size=11, color=ft.Colors.GREY_500),
+            ], spacing=8, tight=True, scroll=ft.ScrollMode.AUTO),
+            actions=[
+                ft.TextButton("Entendi", on_click=lambda _: page.pop_dialog()),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        page.show_dialog(dialog)
+
+    btn_ajuda_cookies.on_click = mostrar_ajuda_cookies
 
     # --- EVENTOS ---
     def verificar_atualizacao(e=None):
@@ -170,31 +246,12 @@ def main(page: ft.Page):
 
     btn_atualizar.on_click = verificar_atualizacao
 
-    def mapear_formato(qualidade: str, eh_social: bool = False) -> str:
-        if qualidade == "Apenas Áudio (MP3)":
-            return "audio"
-
-        # Formatos mais precisos para cada qualidade
-        formatos = {
-            "Melhor Qualidade (Máxima)": "best[ext=mp4]/best",
-            "8K (7680p)": "best[height<=7680][ext=mp4]/best[height<=7680]/best",
-            "4K (2160p)": "best[height<=2160][ext=mp4]/best[height<=2160]/best",
-            "2K (1440p)": "best[height<=1440][ext=mp4]/best[height<=1440]/best",
-            "Full HD (1080p)": "best[height<=1080][ext=mp4]/best[height<=1080]/best",
-            "HD (720p)": "best[height<=720][ext=mp4]/best[height<=720]/best",
-            "Standard (480p)": "best[height<=480][ext=mp4]/best[height<=480]/best",
-            "Low (360p)": "best[height<=360][ext=mp4]/best[height<=360]/best",
-            "Mínima (240p)": "best[height<=240][ext=mp4]/best[height<=240]/best",
-            "Apenas Áudio (Melhor Qualidade)": "bestaudio/ba",
-        }
-        return formatos.get(qualidade, "best[ext=mp4]/best")
-
     def disparar_download(url: str, qualidade: str, eh_social: bool = False):
         if not url:
             mostrar_status("Informe uma URL válida.", e_erro=True)
             return
 
-        fmt = mapear_formato(qualidade, eh_social)
+        fmt = mapear_formato(qualidade, downloader_service.verificar_ffmpeg())
         progresso_bar.visible = True
         progresso_bar.value = 0
         progresso_texto.value = "Iniciando download..."
@@ -225,7 +282,7 @@ def main(page: ft.Page):
             ft.dropdown.Option("Standard (480p)"),
             ft.dropdown.Option("Low (360p)"),
             ft.dropdown.Option("Mínima (240p)"),
-            ft.dropdown.Option("Apenas Áudio (MP3)"),
+            ft.dropdown.Option("Apenas Áudio (MP3 no PC)"),
             ft.dropdown.Option("Apenas Áudio (Melhor Qualidade)"),
         ],
         value="Melhor Qualidade (Máxima)"
@@ -235,6 +292,11 @@ def main(page: ft.Page):
         ft.Text("Download do YouTube", size=18, weight=ft.FontWeight.BOLD),
         input_url_yt,
         dropdown_yt,
+        ft.Text(
+            "Bloqueio 'suspeita de bot'? Faça login (botão de login acima) ou importe o cookies.txt (botão de upload). Toque no (?) para ver como.",
+            size=11,
+            color=ft.Colors.GREY_500,
+        ),
         ft.Button("Baixar YouTube", icon=ft.Icons.DOWNLOAD, 
                   on_click=lambda e: disparar_download(input_url_yt.value.strip(), dropdown_yt.value))
     ], spacing=15, scroll=ft.ScrollMode.AUTO)
@@ -253,7 +315,7 @@ def main(page: ft.Page):
             ft.dropdown.Option("Standard (480p)"),
             ft.dropdown.Option("Low (360p)"),
             ft.dropdown.Option("Mínima (240p)"),
-            ft.dropdown.Option("Apenas Áudio (MP3)"),
+            ft.dropdown.Option("Apenas Áudio (MP3 no PC)"),
             ft.dropdown.Option("Apenas Áudio (Melhor Qualidade)"),
         ],
         value="Melhor Qualidade (Máxima)"
@@ -283,6 +345,8 @@ def main(page: ft.Page):
                     ft.Row([
                         status_auth,
                         btn_login,
+                        btn_importar_cookies,
+                        btn_ajuda_cookies,
                         btn_atualizar,
                     ], spacing=5)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),

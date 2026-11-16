@@ -1,8 +1,7 @@
 import os
-import time
 import random
 import yt_dlp
-from utils import obter_pasta_downloads
+from utils import obter_pasta_downloads, obter_pasta_dados, esta_no_android
 
 class VideoDownloader:
     def __init__(self, callback_status, callback_progress):
@@ -19,16 +18,11 @@ class VideoDownloader:
         import shutil
         return shutil.which('ffmpeg') is not None and shutil.which('ffprobe') is not None
 
-    def esta_no_android(self) -> bool:
-        """Detecta se está rodando no Android."""
-        return 'ANDROID_STORAGE' in os.environ or 'ANDROID_ARGUMENT' in os.environ
-
     def baixar_midia(self, url: str, formato_escolhido: str, eh_social: bool = False):
         pasta_dest = obter_pasta_downloads()
-        
-        # Local onde os cookies capturados são salvos
-        pasta_app = os.path.dirname(os.path.abspath(__file__))
-        caminho_cookie = os.path.join(pasta_app, "youtube_cookies.txt")
+
+        # Local onde os cookies capturados são salvos (diretório gravável do app)
+        caminho_cookie = os.path.join(obter_pasta_dados(), "youtube_cookies.txt")
 
         ydl_opts = {
             'outtmpl': os.path.join(pasta_dest, '%(title)s.%(ext)s'),
@@ -61,20 +55,20 @@ class VideoDownloader:
             }
 
         # --- SELEÇÃO DE FORMATOS ---
-        eh_android = self.esta_no_android()
+        eh_android = esta_no_android()
         tem_ffmpeg = self.verificar_ffmpeg()
 
         if formato_escolhido == "audio":
             # "Apenas Áudio (MP3)" - Converte com FFmpeg se disponível
             if eh_android or not tem_ffmpeg:
                 print("[INFO] Ambiente Android ou FFmpeg não disponível. Baixando áudio direto sem conversão.")
-                self.mostrar_status("📱 Baixando melhor áudio disponível (sem conversão)...")
+                self.mostrar_status("Baixando melhor áudio disponível (sem conversão)...")
                 ydl_opts['format'] = 'bestaudio/ba'
                 # Não adiciona postprocessor se não tem FFmpeg
             else:
                 # PC com FFmpeg - converte para MP3
                 print("[INFO] FFmpeg disponível. Convertendo para MP3...")
-                self.mostrar_status("🎵 Convertendo para MP3...")
+                self.mostrar_status("Convertendo para MP3...")
                 ydl_opts['format'] = 'bestaudio/ba'
                 # Garante que vai usar FFmpeg para converter
                 ydl_opts['postprocessors'] = [{
@@ -87,7 +81,7 @@ class VideoDownloader:
         elif formato_escolhido == "bestaudio/ba":
             # "Apenas Áudio (Melhor Qualidade)" - Áudio sem conversão
             print("[INFO] Baixando melhor áudio disponível (formato nativo)...")
-            self.mostrar_status("🎵 Baixando melhor áudio (formato nativo)...")
+            self.mostrar_status("Baixando melhor áudio (formato nativo)...")
             ydl_opts['format'] = 'bestaudio/ba'
         else:
             # Vídeos em diferentes qualidades
@@ -96,29 +90,29 @@ class VideoDownloader:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
-                
+
                 # Mensagem de sucesso
                 if formato_escolhido == "audio":
                     if eh_android or not tem_ffmpeg:
                         self.mostrar_status(
-                            "✓ Download do áudio concluído! (Formato nativo do YouTube)",
+                            "Download do áudio concluído! (Formato nativo do YouTube)",
                             eh_erro=False
                         )
                     else:
                         self.mostrar_status(
-                            "✓ Download e conversão para MP3 concluído!",
+                            "Download e conversão para MP3 concluído!",
                             eh_erro=False
                         )
                 elif formato_escolhido == "bestaudio/ba":
                     self.mostrar_status(
-                        "✓ Download do áudio concluído! (Formato nativo)",
+                        "Download do áudio concluído! (Formato nativo)",
                         eh_erro=False
                     )
-                
+
         except yt_dlp.utils.DownloadError as err:
             if "Sign in to confirm you're not a bot" in str(err) or "bot" in str(err).lower():
                 self.mostrar_status(
-                    "❌ YouTube bloqueou como suspeita de bot. Faça login pela opção 'Login YouTube' no app.",
+                    "YouTube bloqueou como suspeita de bot. Toque em 'Login YouTube' (ou no ícone de upload) e importe um cookies.txt exportado do seu login.",
                     True
                 )
             else:
@@ -128,7 +122,7 @@ class VideoDownloader:
             # Detectar erros específicos de FFmpeg
             if "ffmpeg" in erro_msg.lower() or "postprocessor" in erro_msg.lower():
                 self.mostrar_status(
-                    "⚠️ Erro de processamento (FFmpeg não disponível). Tente novamente sem conversão.",
+                    "Erro de processamento (FFmpeg não disponível). Tente novamente sem conversão.",
                     True
                 )
             else:

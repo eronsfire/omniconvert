@@ -1,0 +1,17 @@
+[tool.flet]
+name = "Conversor Eronsfire"
+description = "Conversor de vídeos, áudios e mídias do YouTube, Instagram e TikTok"
+
+[tool.flet.app]
+path = "."
+
+[tool.poetry.dependencies]
+python = "^3.11"
+flet = ">=0.86.5"
+yt-dlp = ">=2026.7.4"
+requests = ">=2.34.2"
+certifi = ">=2026.7.22"
+selenium = ">=4.47.0"
+webdriver-manager = ">=4.1.2"
+deno = ">=2.9.8"
+pytest = ">=9.2.0"

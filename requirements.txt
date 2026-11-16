@@ -1,6 +1,8 @@
-flet
-yt-dlp
-requests
-certifi
-selenium>=4.0.0
-webdriver-manager>=3.8.0
+flet==0.86.5
+yt-dlp==2026.7.4
+requests==2.34.2
+certifi==2026.7.22
+selenium==4.47.0
+webdriver-manager==4.1.2
+deno==2.9.8
+pytest==9.2.0
