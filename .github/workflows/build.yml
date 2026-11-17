@@ -34,8 +34,10 @@ jobs:
         # que o Google removeu do repositório — por isso foi removido.
         # Basta aceitar as licenças do SDK pré-existente.
         run: |
-          sdkmanager --version
-          yes | sdkmanager --licenses > /dev/null || true
+          SDKMANAGER=$(find /usr/local/lib/android/sdk/cmdline-tools -mindepth 3 -maxdepth 3 -name sdkmanager -type f | sort | tail -n 1)
+          echo "Usando sdkmanager: $SDKMANAGER"
+          "$SDKMANAGER" --version
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
 
       - name: Cache Flutter SDK
         uses: actions/cache@v4
