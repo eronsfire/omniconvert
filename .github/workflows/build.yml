@@ -27,8 +27,15 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Accept Android SDK licenses
+        # O runner ubuntu-latest já traz o Android SDK pré-instalado em
+        # /usr/local/lib/android/sdk (ANDROID_HOME). O action
+        # android-actions/setup-android tenta instalar o pacote `tools`,
+        # que o Google removeu do repositório — por isso foi removido.
+        # Basta aceitar as licenças do SDK pré-existente.
+        run: |
+          sdkmanager --version
+          yes | sdkmanager --licenses > /dev/null || true
 
       - name: Cache Flutter SDK
         uses: actions/cache@v4
