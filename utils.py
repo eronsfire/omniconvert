@@ -80,6 +80,25 @@ def obter_pasta_downloads() -> str:
         os.makedirs(pasta_pc, exist_ok=True)
     return pasta_pc
 
+def versao_menor(atual: str, recente: str) -> bool:
+    """True se `atual` for anterior a `recente` (comparação numérica por partes)."""
+    try:
+        from packaging.version import Version
+        return Version(atual) < Version(recente)
+    except Exception:
+        try:
+            def _partes(v):
+                if not any(ch.isdigit() for ch in v):
+                    raise ValueError("versão inválida")
+                partes = []
+                for pedaco in v.replace("-", ".").split("."):
+                    digitos = "".join(ch for ch in pedaco if ch.isdigit())
+                    partes.append(int(digitos) if digitos else 0)
+                return partes
+            return _partes(atual) < _partes(recente)
+        except Exception:
+            return False
+
 def mapear_formato(qualidade: str, tem_ffmpeg: bool = False) -> str:
     """
     Converte o rótulo da UI em um seletor de formato do yt-dlp.

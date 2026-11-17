@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils import mapear_formato, obter_pasta_dados  # noqa: E402
+from utils import mapear_formato, obter_pasta_dados, versao_menor  # noqa: E402
 from youtube_auth import YouTubeAuthenticator  # noqa: E402
 from updater import AppUpdater  # noqa: E402
 
@@ -118,6 +118,41 @@ def test_importar_cookies_lixo_rejeitado(tmp_path, monkeypatch):
     assert not ok
     assert not os.path.exists(auth.cookies_path)
     assert auth.verificar_cookies_validos() is False
+
+
+# ---------- versao_menor ----------
+
+def test_versao_menor_comparacao():
+    assert versao_menor("2026.7.4", "2026.8.1") is True
+    assert versao_menor("2026.8.1", "2026.7.4") is False
+    assert versao_menor("0.9.9.7.2", "0.10.0") is True
+    assert versao_menor("2026.7.4", "2026.7.4") is False
+    assert versao_menor("lixo", "2026.7.4") is False  # nunca bloqueia o app por erro
+
+
+# ---------- VideoDownloader: avaliação de cookies ----------
+
+def test_avaliar_cookies_inexistente(tmp_path, monkeypatch):
+    monkeypatch.setenv("FLET_APP_STORAGE_DATA", str(tmp_path / "vazio"))
+    from downloader import VideoDownloader
+    dl = VideoDownloader(lambda m, e=False: None, lambda d: None)
+    info = dl._avaliar_cookies(str(tmp_path / "nao_existe.txt"))
+    assert info == {"existe": False, "valido": False, "marcadores": []}
+
+
+def test_avaliar_cookies_valido_e_invalido(tmp_path, monkeypatch):
+    monkeypatch.setenv("FLET_APP_STORAGE_DATA", str(tmp_path / "data"))
+    from downloader import VideoDownloader
+    dl = VideoDownloader(lambda m, e=False: None, lambda d: None)
+
+    valido = tmp_path / "valido.txt"
+    valido.write_text(COOKIE_VALIDO, encoding="utf-8")
+    assert dl._avaliar_cookies(str(valido))["valido"] is True
+    assert "SID" in dl._avaliar_cookies(str(valido))["marcadores"]
+
+    invalido = tmp_path / "invalido.txt"
+    invalido.write_text(COOKIE_SEM_LOGIN, encoding="utf-8")
+    assert dl._avaliar_cookies(str(invalido))["valido"] is False
 
 
 # ---------- AppUpdater: verificação SHA-256 ----------

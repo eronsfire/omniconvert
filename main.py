@@ -4,7 +4,7 @@ from downloader import VideoDownloader
 from updater import AppUpdater
 from youtube_auth import YouTubeAuthenticator
 from config import APP_VERSION
-from utils import mapear_formato
+from utils import mapear_formato, versao_menor
 
 # Lock para serializar atualizações de UI vindas das threads de trabalho
 # (o Flet não é thread-safe para `page.update()` chamado direto de threads)
@@ -261,7 +261,11 @@ def main(page: ft.Page):
             try:
                 downloader_service.baixar_midia(url, fmt, eh_social)
             except Exception as err:
-                mostrar_status(f"Erro no download: {err}", e_erro=True)
+                msg_err = str(err).lower()
+                if "ffmpeg" in msg_err or "postprocessor" in msg_err:
+                    mostrar_status("Erro de processamento (FFmpeg ausente/desatualizado). Tente novamente sem conversão.", e_erro=True)
+                else:
+                    mostrar_status(f"Erro no download: {err}", e_erro=True)
             finally:
                 progresso_bar.visible = False
                 page.update()
@@ -389,6 +393,28 @@ def main(page: ft.Page):
     
     # Atualizar status de autenticação ao iniciar
     atualizar_status_auth()
+
+    # Verifica em segundo plano se o yt-dlp está desatualizado
+    # (o YouTube muda o anti-bot com frequência; manter o yt-dlp atual evita o bloqueio de bot)
+    def verificar_yt_dlp_atualizado():
+        try:
+            import yt_dlp
+            import requests
+            atual = yt_dlp.version.__version__
+            r = requests.get("https://pypi.org/pypi/yt-dlp/json", timeout=6)
+            if r.status_code != 200:
+                return
+            recente = r.json().get("info", {}).get("version", "")
+            if recente and versao_menor(atual, recente):
+                mostrar_status(
+                    f"Aviso: yt-dlp desatualizado ({atual} -> {recente}). "
+                    "Atualize para evitar o bloqueio de suspeita de bot.",
+                    e_erro=True,
+                )
+        except Exception:
+            pass
+
+    threading.Thread(target=verificar_yt_dlp_atualizado, daemon=True).start()
 
 if __name__ == "__main__":
     ft.run(main)

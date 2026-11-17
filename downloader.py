@@ -13,6 +13,22 @@ class VideoDownloader:
             'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         ]
 
+    def _avaliar_cookies(self, caminho: str) -> dict:
+        """Verifica se o arquivo de cookies existe e contém marcadores de login reais."""
+        resultado = {"existe": False, "valido": False, "marcadores": []}
+        if not os.path.exists(caminho):
+            return resultado
+        resultado["existe"] = True
+        try:
+            from youtube_auth import YouTubeAuthenticator
+            with open(caminho, "r", encoding="utf-8", errors="ignore") as f:
+                info = YouTubeAuthenticator.analisar_cookies_netscape(f.read())
+            resultado["marcadores"] = info["marcadores"]
+            resultado["valido"] = len(info["marcadores"]) > 0
+        except Exception:
+            resultado["valido"] = False
+        return resultado
+
     def verificar_ffmpeg(self) -> bool:
         """Verifica se FFmpeg está disponível no sistema."""
         import shutil
@@ -42,8 +58,18 @@ class VideoDownloader:
         }
 
         # Se o arquivo de cookies existir, ativa a autenticação
-        if os.path.exists(caminho_cookie):
-            print(f"[DEBUG] Usando cookies salvos: {caminho_cookie}")
+        cookie_info = self._avaliar_cookies(caminho_cookie)
+        if cookie_info["existe"]:
+            if cookie_info["valido"]:
+                print(f"[DEBUG] Login válido detectado ({', '.join(cookie_info['marcadores'])}). Usando cookies salvos: {caminho_cookie}")
+                self.mostrar_status(f"Usando seu login do YouTube ({', '.join(cookie_info['marcadores'])}).")
+            else:
+                print(f"[WARN] Arquivo de cookies SEM marcadores de login: {caminho_cookie}")
+                self.mostrar_status(
+                    "Atenção: suas cookies parecem expirados/inválidos (sem marcador de login). "
+                    "Se o download for bloqueado, reimporte o cookies.txt no botão de upload.",
+                    e_erro=True,
+                )
             ydl_opts['cookiefile'] = caminho_cookie
             ydl_opts['extract_flat'] = False
         else:
@@ -87,9 +113,32 @@ class VideoDownloader:
             # Vídeos em diferentes qualidades
             ydl_opts['format'] = formato_escolhido
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+        # --- TENTATIVAS COM CLIENTES DE EXTRAÇÃO ---
+        # O YouTube muda o anti-bot com frequência. Se o cliente padrão for
+        # recusado (bot/403/429/PO token), tenta os outros na ordem.
+        if eh_android:
+            clientes = ["android_vr", None, "web_safari"]
+        else:
+            clientes = [None, "web_safari", "android_vr"]
+
+        ultimo_erro = None
+        baixou = False
+        for cliente in clientes:
+            opts = dict(ydl_opts)
+            if cliente:
+                extrator = dict(opts.get('extractor_args') or {})
+                youtube = dict(extrator.get('youtube') or {})
+                youtube['player_client'] = [cliente]
+                extrator['youtube'] = youtube
+                opts['extractor_args'] = extrator
+                nome_cliente = cliente
+            else:
+                nome_cliente = "padrão do yt-dlp"
+
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    ydl.download([url])
+                baixou = True
 
                 # Mensagem de sucesso
                 if formato_escolhido == "audio":
@@ -108,22 +157,28 @@ class VideoDownloader:
                         "Download do áudio concluído! (Formato nativo)",
                         eh_erro=False
                     )
+                break
+            except yt_dlp.utils.DownloadError as err:
+                ultimo_erro = err
+                msg = str(err).lower()
+                if any(x in msg for x in ("bot", "sign in", "403", "forbidden", "429", "too many", "po token")):
+                    print(f"[WARN] Cliente '{nome_cliente}' recusado pelo YouTube: {err}")
+                    self.mostrar_status(f"YouTube recusou (cliente {nome_cliente}); tentando outro cliente...")
+                    continue
+                raise
 
-        except yt_dlp.utils.DownloadError as err:
-            if "Sign in to confirm you're not a bot" in str(err) or "bot" in str(err).lower():
-                self.mostrar_status(
-                    "YouTube bloqueou como suspeita de bot. Toque em 'Login YouTube' (ou no ícone de upload) e importe um cookies.txt exportado do seu login.",
-                    True
-                )
-            else:
-                self.mostrar_status(f"Erro ao baixar mídia: {str(err)}", True)
-        except Exception as err:
-            erro_msg = str(err)
-            # Detectar erros específicos de FFmpeg
-            if "ffmpeg" in erro_msg.lower() or "postprocessor" in erro_msg.lower():
-                self.mostrar_status(
-                    "Erro de processamento (FFmpeg não disponível). Tente novamente sem conversão.",
-                    True
-                )
-            else:
-                self.mostrar_status(f"Erro ao baixar mídia: {erro_msg}", True)
+        if not baixou:
+            err = ultimo_erro
+            try:
+                raise err if err else RuntimeError("Falha sem detalhes")
+            except yt_dlp.utils.DownloadError as e:
+                if "bot" in str(e).lower() or "403" in str(e) or "sign in" in str(e).lower():
+                    self.mostrar_status(
+                        "YouTube bloqueou como suspeita de bot em todos os clientes. "
+                        "Toque no ícone de login/upload e importe um cookies.txt exportado do seu login.",
+                        True,
+                    )
+                else:
+                    self.mostrar_status(f"Erro ao baixar mídia: {str(e)}", True)
+            except Exception as e:
+                self.mostrar_status(f"Erro ao baixar mídia: {str(e)}", True)

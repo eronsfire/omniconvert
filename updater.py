@@ -5,7 +5,7 @@ import requests
 import subprocess
 import webbrowser
 from config import APP_VERSION, GITHUB_REPO
-from utils import obter_pasta_downloads, esta_no_android
+from utils import obter_pasta_downloads, esta_no_android, versao_menor
 
 class AppUpdater:
     def __init__(self, callback_status):
@@ -56,7 +56,7 @@ class AppUpdater:
                 self.mostrar_status("Release sem tag de versão.", True)
                 return
 
-            if tag_versao == APP_VERSION:
+            if not versao_menor(APP_VERSION, tag_versao):
                 self.mostrar_status(f"Seu app já está atualizado (v{APP_VERSION}).")
                 return
 
