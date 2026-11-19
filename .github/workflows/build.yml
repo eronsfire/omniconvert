@@ -81,20 +81,20 @@ jobs:
             --android-signing-key-password "${{ secrets.KEY_PASSWORD }}"
 
           find . -name "*.apk" -type f | head -n 20
-          cp "$(find . -path "*/app-release.apk" -type f | head -n 1)" "${{ github.workspace }}/Conversor_Eronsfire_v${{ github.ref_name }}.apk"
+          cp "$(find . -path "*/app-release.apk" -type f | head -n 1)" "${{ github.workspace }}/Conversor_Eronsfire_${{ github.ref_name }}.apk"
 
       - name: Generate SHA256 checksum
         run: |
           cd "${{ github.workspace }}"
-          sha256sum "Conversor_Eronsfire_v${{ github.ref_name }}.apk" > "Conversor_Eronsfire_v${{ github.ref_name }}.apk.sha256"
-          cat "Conversor_Eronsfire_v${{ github.ref_name }}.apk.sha256"
+          sha256sum "Conversor_Eronsfire_${{ github.ref_name }}.apk" > "Conversor_Eronsfire_${{ github.ref_name }}.apk.sha256"
+          cat "Conversor_Eronsfire_${{ github.ref_name }}.apk.sha256"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            Conversor_Eronsfire_v${{ github.ref_name }}.apk
-            Conversor_Eronsfire_v${{ github.ref_name }}.apk.sha256
+            Conversor_Eronsfire_${{ github.ref_name }}.apk
+            Conversor_Eronsfire_${{ github.ref_name }}.apk.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
