@@ -6,12 +6,11 @@ description = "Conversor de vídeos, áudios e mídias do YouTube, Instagram e T
 path = "."
 
 [tool.poetry.dependencies]
+# Apenas dependências de RUNTIME do app (embutidas no APK).
+# deno/selenium/pytest NÃO entram aqui: não têm wheel para Android ou não
+# servem dentro do APK. Desenvolvimento local e CI usam requirements.txt.
 python = "^3.11"
 flet = ">=0.86.5"
 yt-dlp = ">=2026.7.4"
 requests = ">=2.34.2"
 certifi = ">=2026.7.22"
-selenium = ">=4.47.0"
-webdriver-manager = ">=4.1.2"
-deno = ">=2.9.8"
-pytest = ">=9.2.0"
