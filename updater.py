@@ -128,7 +128,7 @@ class AppUpdater:
             else:
                 print("[WARN] Release sem arquivo .sha256 — verificação de integridade pulada.")
 
-            self.mostrar_status("Download pronto! Abrindo instalador...")
+            self.mostrar_status("Download pronto! Verificando e preparando instalação...")
             print(f"[DEBUG] APK salvo em: {caminho_apk}")
             self._chamar_instalador_sistema(caminho_apk)
 
@@ -137,28 +137,38 @@ class AppUpdater:
 
     def _chamar_instalador_sistema(self, caminho_apk: str):
         """
-        Tenta abrir o instalador de pacotes do Android.
-        Em aparelhos onde o intent file:// não funciona (Android 7+),
-        orienta o usuário a abrir o APK manualmente pela pasta Downloads.
+        Best effort para abrir o instalador de pacotes no Android.
+
+        Nenhum app comum consegue abrir o instalador sozinho (Android não
+        permite): `am start` exige privilégio de shell e `file://` em intents
+        exige FileProvider (código nativo, que este projeto não tem).
+        Por isso o caminho confiável é o usuário tocar no APK na pasta
+        Downloads — e esta mensagem orienta exatamente isso.
         """
-        try:
-            cmd = [
-                "am", "start",
-                "-a", "android.intent.action.VIEW",
-                "-d", f"file://{caminho_apk}",
-                "-t", "application/vnd.android.package-archive",
-                "-f", "0x10000001"  # FLAG_ACTIVITY_NEW_TASK | FLAG_GRANT_READ_URI_PERMISSION
-            ]
-            resultado = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            if resultado.returncode == 0:
-                print("[INFO] Instalador aberto no Android")
-                self.mostrar_status("Instalador aberto. Confirme a instalação.")
-            else:
-                raise RuntimeError(resultado.stderr.strip() or f"am start retornou {resultado.returncode}")
-        except Exception as e:
+        if esta_no_android():
+            try:
+                cmd = [
+                    "am", "start",
+                    "-a", "android.intent.action.VIEW",
+                    "-d", f"file://{caminho_apk}",
+                    "-t", "application/vnd.android.package-archive",
+                    "-f", "0x10000001"  # FLAG_ACTIVITY_NEW_TASK | FLAG_GRANT_READ_URI_PERMISSION
+                ]
+                resultado = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                if resultado.returncode == 0:
+                    print("[INFO] Instalador aberto no Android")
+                    self.mostrar_status("Instalador aberto. Confirme a instalação.")
+                    return
+                print(f"[DEBUG] am start retornou {resultado.returncode}: {resultado.stderr.strip()}")
+            except Exception as e:
+                print(f"[DEBUG] am start falhou: {e}")
+
+            # Caminho confiável: o próprio usuário instala tocando no APK
+            nome_apk = os.path.basename(caminho_apk)
             self.mostrar_status(
-                "Não foi possível abrir o instalador automaticamente. "
-                f"Abra o arquivo manualmente: {caminho_apk} ({e})",
-                True,
+                f"APK baixado! Para instalar: abra o gerenciador de arquivos "
+                f"→ Downloads → toque em {nome_apk} → Instalar "
+                f"(o Android não permite o app abrir o instalador sozinho).",
+                e_erro=False,
             )
-            print(f"[ERROR] Falha ao abrir instalador: {e}")
+            print(f"[INFO] Orientação de instalação manual: {caminho_apk}")
