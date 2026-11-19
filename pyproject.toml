@@ -5,6 +5,14 @@ description = "Conversor de vídeos, áudios e mídias do YouTube, Instagram e T
 [tool.flet.app]
 path = "."
 
+[tool.flet.flutter.pubspec.dependency_overrides]
+# O template do Flet 0.86.5 fixa jni 1.0.0, modelo que quebra com
+# shared_preferences_android (exige jni ^1.1.0 em avaliacao constante) e com
+# jni_flutter 1.1.0 (publicada 15h atras, feita para o jni 1.2.0 retracionado).
+# Fixando o par estavel de 15 dias atras: jni 1.1.2 + jni_flutter 1.0.4+1.
+jni = "1.1.2"
+jni_flutter = "1.0.4+1"
+
 [tool.poetry.dependencies]
 # Apenas dependências de RUNTIME do app (embutidas no APK).
 # deno/selenium/pytest NÃO entram aqui: não têm wheel para Android ou não
