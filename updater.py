@@ -2,10 +2,9 @@ import os
 import glob
 import hashlib
 import requests
-import subprocess
 import webbrowser
 from config import APP_VERSION, GITHUB_REPO
-from utils import obter_pasta_downloads, esta_no_android, versao_menor
+from utils import obter_pasta_downloads, obter_pasta_dados, esta_no_android, versao_menor
 
 class AppUpdater:
     def __init__(self, callback_status):
@@ -38,9 +37,10 @@ class AppUpdater:
         Verifica a release mais recente no GitHub.
 
         - Desktop (PC): não dá para instalar APK — abre a página de releases no navegador.
-        - Android: baixa o APK para a pasta Downloads, confere o SHA-256 (se a release
-          publicar .sha256) e abre o instalador. O APK fica no aparelho; APKs antigos
-          do app são removidos antes do próximo download.
+        - Android: baixa o APK para a pasta privada do app, confere o SHA-256 (se a
+          release publicar .sha256), grava um marcador de instalação e a Activity nativa
+          abre a tela de instalação do Android em segundos (1 toque do usuário — o
+          Android não permite instalação 100% silenciosa fora da Play Store).
         """
         try:
             res = requests.get(self._api_url(), timeout=8)
@@ -82,7 +82,9 @@ class AppUpdater:
                 return
 
             apk_url = apk_asset.get("browser_download_url")
-            pasta_dest = obter_pasta_downloads()
+            # Em Android usa a pasta privada do app (onde o FileProvider pode servi-lo);
+            # no PC usa Downloads normal (mas o PC cai no fluxo de navegador antes).
+            pasta_dest = obter_pasta_dados() if esta_no_android() else obter_pasta_downloads()
 
             # Remove APKs antigos DESTE APP antes de baixar o novo
             for apk_antigo in glob.glob(os.path.join(pasta_dest, "Conversor_Eronsfire_*.apk")):
@@ -137,38 +139,36 @@ class AppUpdater:
 
     def _chamar_instalador_sistema(self, caminho_apk: str):
         """
-        Best effort para abrir o instalador de pacotes no Android.
+        Android: grava um marcador de instalação pendente na pasta de dados do app.
 
-        Nenhum app comum consegue abrir o instalador sozinho (Android não
-        permite): `am start` exige privilégio de shell e `file://` em intents
-        exige FileProvider (código nativo, que este projeto não tem).
-        Por isso o caminho confiável é o usuário tocar no APK na pasta
-        Downloads — e esta mensagem orienta exatamente isso.
+        A Activity nativa (MainActivity.kt, recurso do build) faz polling desse
+        marcador e abre o instalador do Android com o APK via FileProvider
+        (content://…) com permissão lida concedida — único jeito de um app comum
+        abrir o instalador. O usuário ainda dá o toque final em "Instalar"
+        (exigido pelo Android fora da Play Store), mas não precisa ir à pasta
+        Downloads nem tocar no APK.
+
+        No PC/navegador, só informa o caminho (desktop não instala APK).
         """
         if esta_no_android():
+            pasta = os.path.dirname(caminho_apk)
+            marcador = os.path.join(pasta, "install_pending.txt")
             try:
-                cmd = [
-                    "am", "start",
-                    "-a", "android.intent.action.VIEW",
-                    "-d", f"file://{caminho_apk}",
-                    "-t", "application/vnd.android.package-archive",
-                    "-f", "0x10000001"  # FLAG_ACTIVITY_NEW_TASK | FLAG_GRANT_READ_URI_PERMISSION
-                ]
-                resultado = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-                if resultado.returncode == 0:
-                    print("[INFO] Instalador aberto no Android")
-                    self.mostrar_status("Instalador aberto. Confirme a instalação.")
-                    return
-                print(f"[DEBUG] am start retornou {resultado.returncode}: {resultado.stderr.strip()}")
+                with open(marcador, "w", encoding="utf-8") as f:
+                    f.write(caminho_apk)
+                print(f"[INFO] Marcador de instalação gravado: {marcador} -> {caminho_apk}")
+                self.mostrar_status(
+                    "APK baixado e verificado! A tela de instalação do Android "
+                    "será aberta em instantes. Confirme em Instalar.",
+                    e_erro=False,
+                )
             except Exception as e:
-                print(f"[DEBUG] am start falhou: {e}")
+                self.mostrar_status(
+                    f"APK baixado, mas não foi possível iniciar o instalador "
+                    f"({e}). Abra o arquivo manualmente: {caminho_apk}",
+                    True,
+                )
+            return
 
-            # Caminho confiável: o próprio usuário instala tocando no APK
-            nome_apk = os.path.basename(caminho_apk)
-            self.mostrar_status(
-                f"APK baixado! Para instalar: abra o gerenciador de arquivos "
-                f"→ Downloads → toque em {nome_apk} → Instalar "
-                f"(o Android não permite o app abrir o instalador sozinho).",
-                e_erro=False,
-            )
-            print(f"[INFO] Orientação de instalação manual: {caminho_apk}")
+        # Desktop: apenas informar (desktop não instala APK)
+        self.mostrar_status(f"APK salvo em: {caminho_apk}")

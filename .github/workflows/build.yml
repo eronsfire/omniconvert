@@ -71,9 +71,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Overlay – Android installer template
+        # Baixa o template oficial do Flet, aplica o overlay do app (FileProvider
+        # + Activity com poll de atualização pendente) e passa o patch como
+        # --template para o build. Isso mantém o repo pequeno e o template
+        # sempre sincronizado com a versão do flet pinada.
+        run: |
+          curl -fsSL -o /tmp/flet-template.zip \
+            https://github.com/flet-dev/flet/releases/download/v0.86.5/flet-build-template.zip
+          mkdir -p ci/.template
+          unzip -q /tmp/flet-template.zip -d ci/.template
+          cp -a ci/android-overlay/. \
+            "ci/.template/build/{{cookiecutter.out_dir}}/android/"
+          echo "--- Overlay aplicado ---"
+          find ci/.template -name MainActivity.kt -o -name AndroidManifest.xml | sort
+
       - name: Build APK
         run: |
           flet build apk \
+            --template ci/.template \
+            --template-dir build \
             --arch arm64-v8a --arch armeabi-v7a \
             --android-signing-key-store "${{ github.workspace }}/upload-keystore.jks" \
             --android-signing-key-store-password "${{ secrets.KEYSTORE_PASSWORD }}" \
